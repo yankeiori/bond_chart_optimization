@@ -8,6 +8,7 @@ from app.backend.user_presets import (
     HAS_DB,
     get_all_presets_for_dropdown,
     get_costume_label,
+    get_costume_options,
     get_costume_present_map,
     get_favorite_options,
     get_preset_data,
@@ -23,6 +24,10 @@ from app.backend.user_presets import (
     get_gift_lovers,
     parse_preset_value,
     VALID_PRESENT_TIERS,
+)
+from app.backend.gift_craft import (
+    compare_second_nodes,
+    second_node,
 )
 from app.backend.gift_exp import (
     get_effectivity,
@@ -2315,6 +2320,67 @@ def _gl_note(text: str) -> html.P:
     )
 
 
+def _gl_craft_section(gift: dict) -> html.Div:
+    """製造（クラフトチェンバー）でこの贈り物が出る2次ノード。"""
+    node = second_node(gift["name"])
+    if node is None:
+        body = [
+            html.Div(
+                "製造の2次ノード（花弁系）では出ません。",
+                style={"fontSize": "0.85rem", "color": "#666"},
+            )
+        ]
+    else:
+        body = [
+            html.Div(
+                [
+                    html.Span(node["node"], className="gl-node"),
+                    html.Span(node["category"], style={"color": "#555"}),
+                    html.Span(
+                        f"ノード内 {node['rate'] * 100:.2f}%",
+                        style={"fontSize": "0.8rem", "color": "#888"},
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "8px",
+                    "flexWrap": "wrap",
+                },
+            ),
+        ]
+        if node["siblings"]:
+            body.append(
+                html.Div(
+                    [
+                        html.Span(
+                            "同じノードで出る贈り物:",
+                            style={"fontSize": "0.8rem", "color": "#888"},
+                        ),
+                        html.Div(
+                            [
+                                html.Span(name, className="gl-chip")
+                                for name in node["siblings"]
+                            ],
+                            className="gl-chips",
+                        ),
+                    ],
+                    style={"marginTop": "6px"},
+                )
+            )
+    return html.Div(
+        [
+            html.Div(html.Strong("製造（2次ノード）"), style={"marginBottom": "6px"}),
+            *body,
+        ],
+        style={
+            "marginTop": "10px",
+            "paddingBottom": "10px",
+            "borderBottom": "1px solid #eee",
+        },
+    )
+
+
 def _gl_tier_section(gift: dict, tier: str, members: list[dict]) -> html.Div:
     """効果ごとの生徒（衣装）一覧。"""
     label, exp = get_effectivity(gift["gift_type"], tier_to_effectivity(tier))
@@ -2354,7 +2420,7 @@ def _gl_result(gift: dict | None) -> list:
                 style={"color": "#888", "margin": "8px 0"},
             )
         ]
-    children = [_gl_header(gift)]
+    children = [_gl_header(gift), _gl_craft_section(gift)]
     lovers = get_gift_lovers(gift["id"])
     if not lovers:
         children.append(
@@ -2394,3 +2460,172 @@ def gl_select_gift(_clicks, ids):
         for i in ids
     ]
     return _gl_result(gifts.get(selected_id)), classes
+
+
+# ======================================================================
+# 2次ノード比較ページ
+# ======================================================================
+
+_NC_DEFAULT_WEIGHT = 1.0
+
+
+def _nc_weight(value) -> float:
+    """重み入力の値を正規化する。未入力・不正値は既定値、負値は 0。"""
+    try:
+        w = float(value)
+    except (TypeError, ValueError):
+        return _NC_DEFAULT_WEIGHT
+    return max(w, 0.0)
+
+
+def _nc_costume_labels() -> dict:
+    return {o["value"]: o["label"] for o in get_costume_options()}
+
+
+@callback(
+    Output("nc-weight-container", "children"),
+    Input("nc-costume-dropdown", "value"),
+    Input("nc-use-weight", "value"),
+    State({"type": "nc-weight", "costume": ALL}, "value"),
+    State({"type": "nc-weight", "costume": ALL}, "id"),
+)
+def nc_render_weights(costume_ids, use_weight, values, ids):
+    """選択中の衣装ごとの重み入力欄。入力済みの重みは選択を変えても引き継ぐ。"""
+    if not use_weight or not costume_ids:
+        return []
+    prev = {i["costume"]: v for i, v in zip(ids, values)}
+    labels = _nc_costume_labels()
+    rows = [
+        html.Div(
+            [
+                html.Span(labels.get(cid, str(cid)), className="nc-weight-label"),
+                dcc.Input(
+                    id={"type": "nc-weight", "costume": cid},
+                    type="number",
+                    min=0,
+                    step=0.1,
+                    value=prev.get(cid, _NC_DEFAULT_WEIGHT),
+                    debounce=True,
+                    persistence=True,
+                    persistence_type="local",
+                    style={"width": "70px", "padding": "2px 4px"},
+                ),
+            ],
+            className="nc-weight-row",
+        )
+        for cid in costume_ids
+    ]
+    return [
+        html.P(
+            "重みは 0 以上（既定 1）。0 にした衣装は比較から外れます。",
+            style={"fontSize": "0.8rem", "color": "#888", "margin": "0 0 4px"},
+        ),
+        html.Div(rows, className="nc-weight-grid"),
+    ]
+
+
+def _nc_gift_row(gift: dict, gifts_by_id: dict, weighted: bool) -> html.Div:
+    """ノード内訳の贈り物1行（アイコン・名前・値・贈る相手）。"""
+    if gift["tier"]:
+        target = [
+            html.Img(
+                src=f"/assets/reaction/{TIER_ICON[gift['tier']]}.png",
+                title=TIER_LABEL[gift["tier"]],
+                style={"height": "18px", "verticalAlign": "middle"},
+            ),
+            html.Span(gift["label"]),
+        ]
+    else:
+        target = [html.Span("好物なし", style={"color": "#aaa"})]
+    value = f"{gift['value']:.1f}" if weighted else f"{gift['exp']} EXP"
+    return html.Div(
+        [
+            html.Img(
+                src=gift_image_src(gifts_by_id[gift["id"]]),
+                style={"width": "32px", "height": "24px", "objectFit": "contain"},
+            ),
+            html.Span(gift["name"], className="nc-gift-name"),
+            html.Span(value, className="nc-gift-value"),
+            html.Span(target, className="nc-gift-target"),
+        ],
+        className="nc-gift-row",
+    )
+
+
+def _nc_result(rows: list[dict], gifts: list[dict], weighted: bool) -> list:
+    """ノードの期待値ランキング。各ノードは内訳を折りたたみで持つ。"""
+    gifts_by_id = {g["id"]: g for g in gifts}
+    top = rows[0]["ev"] if rows else 0
+    unit = "" if weighted else " EXP"
+    items = []
+    for rank, row in enumerate(rows, start=1):
+        pct = row["ev"] / top * 100 if top else 0
+        n = len(row["gifts"])
+        summary = html.Summary(
+            [
+                html.Span(f"{rank}", className="nc-rank"),
+                html.Span(row["node"], className="gl-node nc-node-name"),
+                html.Span(row["category"], className="nc-category"),
+                html.Span(
+                    html.Span(className="nc-bar-fill", style={"width": f"{pct:.1f}%"}),
+                    className="nc-bar",
+                ),
+                html.Strong(f"{row['ev']:.1f}{unit}", className="nc-ev"),
+            ],
+            className="nc-summary",
+            title=f"{n}種から等確率（各 {100 / n:.2f}%）",
+        )
+        items.append(
+            html.Details(
+                [
+                    summary,
+                    html.Div(
+                        [_nc_gift_row(g, gifts_by_id, weighted) for g in row["gifts"]],
+                        className="nc-gifts",
+                    ),
+                ],
+                className="nc-node" + (" nc-top" if rank == 1 else ""),
+            )
+        )
+    return [
+        html.P(
+            ("期待値（重み × EXP）" if weighted else "期待値（EXP）")
+            + "の高い順。行をクリックすると、出る贈り物とそれを贈る衣装を"
+            "表示します。",
+            style={"fontSize": "0.8rem", "color": "#888", "margin": "0 0 8px"},
+        ),
+        *items,
+    ]
+
+
+@callback(
+    Output("nc-result", "children"),
+    Input("nc-costume-dropdown", "value"),
+    Input("nc-use-weight", "value"),
+    Input({"type": "nc-weight", "costume": ALL}, "value"),
+    State({"type": "nc-weight", "costume": ALL}, "id"),
+)
+def nc_compare(costume_ids, use_weight, weight_values, weight_ids):
+    """選択中の衣装で2次ノードの期待値を計算して並べる。"""
+    if not costume_ids:
+        return html.P(
+            "衣装を選んでください。", style={"color": "#888", "margin": "8px 0"}
+        )
+    gifts = load_gifts()
+    if not gifts:
+        return html.P(
+            "贈り物データを読み込めませんでした。",
+            style={"color": "#888", "margin": "8px 0"},
+        )
+    weighted = bool(use_weight)
+    weights = {i["costume"]: _nc_weight(v) for i, v in zip(weight_ids, weight_values)}
+    labels = _nc_costume_labels()
+    members = [
+        {
+            "label": labels.get(cid, str(cid)),
+            "weight": weights.get(cid, _NC_DEFAULT_WEIGHT) if weighted else 1.0,
+            "present": get_costume_present_map(cid),
+        }
+        for cid in costume_ids
+    ]
+    return _nc_result(compare_second_nodes(gifts, members), gifts, weighted)

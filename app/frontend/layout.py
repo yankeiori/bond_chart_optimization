@@ -4,6 +4,7 @@ from pathlib import Path
 from dash import html, dcc
 
 from app.backend.student import BOND_RANGES
+from app.backend.gift_craft import second_node
 from app.backend.gift_exp import (
     get_effectivity,
     tier_to_effectivity,
@@ -1340,21 +1341,56 @@ def _gl_tier_counts(gift: dict, counts: dict[str, int]) -> html.Div:
 
 
 def _gl_card_title(gift: dict, counts: dict[str, int]) -> str:
-    """カードのツールチップ。贈り物名と効果別の内訳を出す。"""
+    """カードのツールチップ。贈り物名と効果別の内訳、製造の2次ノードを出す。"""
     total = sum(counts.values())
     if not total:
-        return f"{gift['name']}（好物にしている生徒なし）"
-    parts = [f"{TIER_LABEL[t]} {counts[t]}人" for t in GL_TIER_ORDER if counts.get(t)]
-    return f"{gift['name']}（計 {total}人: {' / '.join(parts)}）"
+        title = f"{gift['name']}（好物にしている生徒なし）"
+    else:
+        parts = [
+            f"{TIER_LABEL[t]} {counts[t]}人" for t in GL_TIER_ORDER if counts.get(t)
+        ]
+        title = f"{gift['name']}（計 {total}人: {' / '.join(parts)}）"
+    node = second_node(gift["name"])
+    if node:
+        title += f"\n製造 2次ノード: {node['node']}（{node['category']}）"
+    return title
+
+
+def gl_search_text(gift: dict) -> str:
+    """絞り込み用の検索文字列。贈り物名に加えて2次ノード名・カテゴリでも引ける。"""
+    text = gift["name"]
+    node = second_node(gift["name"])
+    if node:
+        text += f" {node['node']} {node['category']}"
+    return _search_text(text)
 
 
 def _gl_gift_card(gift: dict, counts: dict[str, int]) -> html.Button:
-    """贈り物1件のカード（アイコン・名前・効果別の人数）。"""
+    """贈り物1件のカード（アイコン・名前・効果別の人数）。
+
+    製造の2次ノードで出る贈り物は、アイコンにノード名のバッジを重ねる。
+    """
+    node = second_node(gift["name"])
     return html.Button(
         [
-            html.Img(
-                src=gift_image_src(gift),
-                style={"width": "44px", "height": "34px", "objectFit": "contain"},
+            html.Div(
+                [
+                    html.Img(
+                        src=gift_image_src(gift),
+                        style={
+                            "width": "44px",
+                            "height": "34px",
+                            "objectFit": "contain",
+                        },
+                    ),
+                    node
+                    and html.Span(
+                        node["node"],
+                        className="gl-node-badge",
+                        title=f"製造 2次ノード: {node['node']}（{node['category']}）",
+                    ),
+                ],
+                className="gl-icon-wrap",
             ),
             html.Div(gift["name"], className="gl-gift-name"),
             _gl_tier_counts(gift, counts),
@@ -1398,7 +1434,9 @@ def create_gift_lookup_layout() -> html.Div:
                 "効果（特大 / 大 / 中）別に一覧します。好物は衣装ごとに"
                 "異なるため、同じ生徒でも衣装によって効果が変わります。"
                 "カード下部の数字は、その贈り物を好物にしている生徒（衣装）の"
-                "人数を効果別に示したものです。",
+                "人数を効果別に示したものです。"
+                "贈り物名のほか、製造の2次ノード名（桜 など）やカテゴリ"
+                "（化粧品 など）でも絞り込めます。",
                 style={"fontSize": "0.85rem", "color": "#666", "margin": "0 0 12px"},
             ),
             html.Div(
@@ -1419,7 +1457,7 @@ def create_gift_lookup_layout() -> html.Div:
                                         dcc.Input(
                                             id="gl-search",
                                             type="text",
-                                            placeholder="贈り物名で絞り込み...",
+                                            placeholder="贈り物名・2次ノード名で絞り込み...",
                                             value="",
                                             style={
                                                 "marginLeft": "auto",
@@ -1470,7 +1508,84 @@ def create_gift_lookup_layout() -> html.Div:
             # 絞り込み用の検索テキスト {gift_id: 検索文字列}
             dcc.Store(
                 id="gl-search-index",
-                data={g["id"]: _search_text(g["name"]) for g in gifts},
+                data={g["id"]: gl_search_text(g) for g in gifts},
+            ),
+            _footer(),
+        ],
+        className="page-container",
+        style={
+            "maxWidth": "1200px",
+            "margin": "0 auto",
+            "padding": "20px",
+            "fontFamily": "sans-serif",
+        },
+    )
+
+
+# ======================================================================
+# 2次ノード比較ページ
+# ======================================================================
+
+
+def create_node_compare_layout() -> html.Div:
+    """製造の2次ノード比較ページ。
+
+    絆上げ対象の衣装を選ぶと、2次ノードごとに出る贈り物の絆EXP期待値を
+    計算して降順に並べる。贈り物1つの価値は対象の中で最も効果の高い
+    衣装に贈ったときの値（重みを設定した場合は 重み × EXP）。
+    """
+    panel_style = {
+        "padding": "12px",
+        "border": "1px solid #ccc",
+        "borderRadius": "8px",
+        "marginBottom": "16px",
+    }
+    return html.Div(
+        [
+            html.P(
+                [
+                    "製造で「素材の追加投入」をしたときの2次ノード（花弁系）を、"
+                    "出る贈り物の絆経験値の期待値で比較します。贈り物1つの値は、"
+                    "選んだ衣装の中で最も効果が高い衣装に贈ったときの獲得EXPです。"
+                    "ノード内の贈り物は等確率で出るため、その平均を期待値とします。"
+                    "重みを設定すると 重み × EXP の最大値で比較します"
+                    "（優先して上げたい衣装の重みを大きくする、など）。",
+                ],
+                style={"fontSize": "0.85rem", "color": "#666", "margin": "0 0 16px"},
+            ),
+            html.Div(
+                [
+                    html.Strong("絆上げ対象の衣装"),
+                    dcc.Dropdown(
+                        id="nc-costume-dropdown",
+                        options=get_costume_options(),
+                        multi=True,
+                        placeholder="生徒（衣装）を選択...（複数可）",
+                        persistence=True,
+                        persistence_type="local",
+                        style={"marginTop": "6px"},
+                    ),
+                    dcc.Checklist(
+                        id="nc-use-weight",
+                        options=[{"label": " 重みを設定する", "value": "on"}],
+                        value=[],
+                        persistence=True,
+                        persistence_type="local",
+                        style={"marginTop": "8px", "fontSize": "0.85rem"},
+                    ),
+                    html.Div(id="nc-weight-container", style={"marginTop": "6px"}),
+                ],
+                style={**panel_style, "background": "#f5f5ff"},
+            ),
+            html.Div(
+                html.Div(
+                    id="nc-result",
+                    children=html.P(
+                        "衣装を選んでください。",
+                        style={"color": "#888", "margin": "8px 0"},
+                    ),
+                ),
+                style=panel_style,
             ),
             _footer(),
         ],
@@ -1494,6 +1609,7 @@ PAGES = {
     "/gift-simulation": ("贈り物配分シミュレータ", create_gift_simulator_layout),
     "/required-exp": ("必要絆経験値", create_required_exp_layout),
     "/gift-lookup": ("贈り物逆引き", create_gift_lookup_layout),
+    "/node-compare": ("2次ノード比較", create_node_compare_layout),
 }
 
 # 主要ページ以外のページ（フッター等からのみアクセス）。

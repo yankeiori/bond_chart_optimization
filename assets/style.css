@@ -154,6 +154,27 @@ input[type="number"] {
 .gl-normal {
     background: #fafafa;
 }
+/* アイコンに重ねる製造2次ノード名 */
+.gl-icon-wrap {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+.gl-node-badge {
+    position: absolute;
+    top: -3px;
+    right: -1px;
+    font-size: 0.6rem;
+    line-height: 1.3;
+    font-weight: bold;
+    color: #a0304a;
+    background: #fdecef;
+    border: 1px solid #f3c4cf;
+    border-radius: 8px;
+    padding: 0 4px;
+    white-space: nowrap;
+}
 .gl-gift-name {
     font-size: 0.7rem;
     line-height: 1.2;
@@ -187,6 +208,14 @@ input[type="number"] {
     gap: 4px;
     margin-top: 6px;
 }
+/* 製造の2次ノード名（花の名前）のバッジ */
+.gl-node {
+    font-weight: bold;
+    background: #fdecef;
+    border: 1px solid #f3c4cf;
+    border-radius: 10px;
+    padding: 1px 10px;
+}
 .gl-chip {
     font-size: 0.8rem;
     background: #f0f4f8;
@@ -196,8 +225,116 @@ input[type="number"] {
     white-space: nowrap;
 }
 
+/* ── 2次ノード比較ページ ── */
+.nc-weight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 4px 16px;
+}
+.nc-weight-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.85rem;
+}
+.nc-weight-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.nc-node {
+    border-bottom: 1px solid #eee;
+}
+.nc-node.nc-top > .nc-summary {
+    background: #fff8e1;
+}
+.nc-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    cursor: pointer;
+    list-style: none;
+}
+.nc-summary::-webkit-details-marker {
+    display: none;
+}
+.nc-rank {
+    width: 1.6em;
+    text-align: right;
+    color: #888;
+    font-size: 0.85rem;
+}
+.nc-node-name {
+    width: 6.5em;
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: center;
+}
+.nc-category {
+    width: 8em;
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 0.85rem;
+    color: #555;
+}
+.nc-bar {
+    flex: 1;
+    min-width: 40px;
+    height: 10px;
+    background: #f0f0f0;
+    border-radius: 5px;
+    overflow: hidden;
+}
+.nc-bar-fill {
+    display: block;
+    height: 100%;
+    background: #4a90d9;
+}
+.nc-ev {
+    min-width: 5em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.nc-gifts {
+    padding: 4px 0 8px 2.2em;
+}
+.nc-gift-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    padding: 2px 0;
+}
+.nc-gift-name {
+    flex: 1;
+    min-width: 0;
+}
+.nc-gift-value {
+    width: 5em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.nc-gift-target {
+    width: 12em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 /* ── モバイル対応 ── */
 @media (max-width: 768px) {
+    .nc-category {
+        display: none;
+    }
+    .nc-gift-target {
+        width: auto;
+    }
+    .nc-gift-row {
+        flex-wrap: wrap;
+    }
     /* 2カラム → 縦積み */
     .main-columns {
         flex-direction: column !important;
