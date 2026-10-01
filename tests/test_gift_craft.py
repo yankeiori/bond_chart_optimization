@@ -32,17 +32,12 @@ def test_second_node_lookup():
     assert node["node"] == "桜"
     assert node["category"] == "化粧品"
     assert node["rate"] == pytest.approx(1 / 3)
-    assert node["siblings"] == [
-        "チェリーローズカラーのグロス",
-        "ミリタリー用カモフラージュクリーム3種セット",
-    ]
 
 
-def test_single_gift_node_has_no_siblings():
+def test_single_gift_node_rate():
     node = second_node("夏模様の浮き輪")
     assert node["node"] == "翡翠花"
     assert node["rate"] == 1.0
-    assert node["siblings"] == []
 
 
 def test_high_gift_not_in_second_nodes():
@@ -81,7 +76,7 @@ def test_craft_section_shows_node():
     assert "薔薇" in texts
     assert "電子機器" in texts
     assert "ノード内 50.00%" in texts
-    assert "ゲームガールカラー復刻版" in texts
+    assert "ゲームガールカラー復刻版" not in texts
 
 
 def test_craft_section_for_uncraftable_gift():

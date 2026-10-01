@@ -82,7 +82,6 @@ _BY_GIFT_NAME: dict[str, dict] = {
         "category": category,
         # ノード内は等確率
         "rate": 1 / len(names),
-        "siblings": [n for n in names if n != name],
     }
     for node, category, names in SECOND_NODES
     for name in names
@@ -92,8 +91,7 @@ _BY_GIFT_NAME: dict[str, dict] = {
 def second_node(gift_name: str) -> dict | None:
     """贈り物が出る2次ノードの情報を返す。2次ノードで出ない贈り物は None。
 
-    {"node": ノード名, "category": カテゴリ, "rate": ノード内の出現率 (0〜1),
-     "siblings": 同じノードで出る他の贈り物名のリスト}
+    {"node": ノード名, "category": カテゴリ, "rate": ノード内の出現率 (0〜1)}
     """
     return _BY_GIFT_NAME.get(gift_name)
 

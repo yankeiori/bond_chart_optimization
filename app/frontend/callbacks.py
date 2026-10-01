@@ -2349,25 +2349,6 @@ def _gl_craft_section(gift: dict) -> html.Div:
                 },
             ),
         ]
-        if node["siblings"]:
-            body.append(
-                html.Div(
-                    [
-                        html.Span(
-                            "同じノードで出る贈り物:",
-                            style={"fontSize": "0.8rem", "color": "#888"},
-                        ),
-                        html.Div(
-                            [
-                                html.Span(name, className="gl-chip")
-                                for name in node["siblings"]
-                            ],
-                            className="gl-chips",
-                        ),
-                    ],
-                    style={"marginTop": "6px"},
-                )
-            )
     return html.Div(
         [
             html.Div(html.Strong("製造（2次ノード）"), style={"marginBottom": "6px"}),
