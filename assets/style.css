@@ -324,6 +324,29 @@ input[type="number"] {
     gap: 4px;
 }
 
+.nc-craft-panel:not(:empty) {
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    background: #fffdf5;
+}
+.nc-craft-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+.nc-craft-total {
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+}
+.nc-craft-rate {
+    width: 7.5em;
+    color: #555;
+    font-variant-numeric: tabular-nums;
+}
+
 /* ── モバイル対応 ── */
 @media (max-width: 768px) {
     .nc-category {

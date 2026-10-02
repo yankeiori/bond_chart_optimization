@@ -2,11 +2,19 @@
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from dash import html
 
-from app.backend.gift_craft import SECOND_NODES, compare_second_nodes, second_node
+from app.backend.crafting_data import TIERS
+from app.backend.gift_craft import (
+    OFFERED_NODES,
+    SECOND_NODES,
+    compare_second_nodes,
+    craft_expected_exp,
+    second_node,
+)
 from app.frontend import callbacks
 from app.frontend.callbacks import _gl_craft_section, _nc_weight
 from app.frontend.layout import _gl_card_title, _gl_gift_card, gl_search_text
@@ -239,3 +247,122 @@ def test_lookup_card_shows_node_badge():
 def test_lookup_card_without_node_has_no_badge():
     card = _gl_gift_card({"id": "lace", "name": "レースの枕", "gift_type": "high"}, {})
     assert _find_class(card, "gl-node-badge") == []
+
+
+# ---------------------------------------------------------------------------
+# 製造1回あたりの期待値（1〜3次）
+# ---------------------------------------------------------------------------
+
+_CRAFT_NAMES = {name for nodes in TIERS for *_, gifts in nodes for name, *_ in gifts}
+# 3次の煌めきは高級贈り物（SSR）だけが出る
+_HIGH_NAMES = {
+    gift[0] for _, node, _, gifts in TIERS[2] if node == "煌めき" for gift in gifts
+}
+_CRAFT_GIFTS = [
+    {"id": n, "name": n, "gift_type": "high" if n in _HIGH_NAMES else "normal"}
+    for n in sorted(_CRAFT_NAMES)
+]
+
+
+def _craft_node(tier, name):
+    result = craft_expected_exp(_CRAFT_GIFTS, [])
+    return {n["name"]: n for n in result["tiers"][tier - 1]["nodes"]}[name]
+
+
+def test_crafting_data_gift_names_match_assets():
+    # 通常 35 種 + 高級 13 種
+    assert len(_CRAFT_NAMES) == 48
+    assert len(_HIGH_NAMES) == 13
+    missing = [n for n in _CRAFT_NAMES if not (_GIFT_ASSETS / f"{n}.png").exists()]
+    assert missing == []
+
+
+def test_crafting_data_matches_second_node_table():
+    # Wiki 由来の 2次ノード対応表と SchaleDB のデータが一致する
+    nodes = {name: gifts for _, name, _, gifts in TIERS[1]}
+    for node, _, names in SECOND_NODES:
+        assert {g[0] for g in nodes[node]} == set(names)
+        assert all(g[1] == pytest.approx(1 / len(names)) for g in nodes[node])
+
+
+@pytest.mark.parametrize(
+    "tier, name, chance",
+    [
+        # SchaleDB の ChanceJp（5つの提示に入る確率）
+        (1, "花弁", 0.5257963479898812),
+        (2, "花弁", 0.29914822370359295),
+        (2, "牡丹", 0.024240005437418465),
+        (3, "煌めき", 0.5858488105294458),
+        (3, "花弁", 0.5590322781802878),
+    ],
+)
+def test_offered_probability_matches_schaledb(tier, name, chance):
+    assert _craft_node(tier, name)["offered"] == pytest.approx(chance, abs=1e-9)
+
+
+def test_craft_expected_exp_without_members():
+    result = craft_expected_exp(_CRAFT_GIFTS, [])
+    by_tier = [t["ev"] for t in result["tiers"]]
+    assert by_tier == pytest.approx([14.9391, 13.0893, 59.5496], abs=1e-4)
+    assert result["ev"] == pytest.approx(sum(by_tier))
+    # 3次の花弁: SR 2〜3個 (75%) と SSR 1〜2個 (25%)
+    assert _craft_node(3, "花弁")["ev"] == pytest.approx(
+        0.75 * 2.5 * 20 + 0.25 * 1.5 * 120
+    )
+
+
+def test_craft_picks_are_probabilities():
+    for tier in craft_expected_exp(_CRAFT_GIFTS, [])["tiers"]:
+        picks = [n["pick"] for n in tier["nodes"]]
+        assert all(0 <= p <= n["offered"] + 1e-12 for p, n in zip(picks, tier["nodes"]))
+        assert sum(picks) <= 1
+
+
+def _simulate_tier(tier, gifts, members, samples=100_000):
+    """モンテカルロ: 5つ提示して期待値最大のノードを選んだときの平均。"""
+    result = craft_expected_exp(gifts, members)
+    ev = {n["id"]: n["ev"] for n in result["tiers"][tier - 1]["nodes"]}
+    nodes = TIERS[tier - 1]
+    weights = np.array([n[2] for n in nodes], dtype=float)
+    values = np.array([ev.get(n[0], 0.0) for n in nodes])
+    rng = np.random.default_rng(0)
+    arrival = rng.exponential(1 / weights, size=(samples, len(nodes)))
+    offered = np.argpartition(arrival, OFFERED_NODES, axis=1)[:, :OFFERED_NODES]
+    return values[offered].max(axis=1).mean(), result["tiers"][tier - 1]["ev"]
+
+
+@pytest.mark.parametrize("tier", [1, 2, 3])
+def test_craft_expected_exp_matches_simulation(tier):
+    members = [
+        {"label": "A", "weight": 1.0, "present": {"夏模様の浮き輪": "ultraFavorite"}},
+        {"label": "B", "weight": 1.0, "present": {"レースの枕": "ultraFavorite"}},
+    ]
+    simulated, exact = _simulate_tier(tier, _CRAFT_GIFTS, members)
+    assert simulated == pytest.approx(exact, rel=0.01)
+
+
+def test_craft_picks_highest_expected_node():
+    members = [
+        {"label": "A", "weight": 1.0, "present": {"夏模様の浮き輪": "ultraFavorite"}}
+    ]
+    nodes = craft_expected_exp(_CRAFT_GIFTS, members)["tiers"][1]["nodes"]
+    # 翡翠花（浮き輪のみ）は 80 で、花弁 (80 + 20*34) / 35 より上に来る
+    assert nodes[0]["name"] == "翡翠花"
+    assert nodes[0]["ev"] == 80
+    # 翡翠花が提示されれば必ず選ぶ
+    assert nodes[0]["pick"] == pytest.approx(nodes[0]["offered"])
+    gift = nodes[0]["gifts"][0]
+    assert gift["label"] == "A" and gift["amount"] == 1
+
+
+def test_craft_zero_weight_gives_zero():
+    members = [{"label": "A", "weight": 0.0, "present": {}}]
+    assert craft_expected_exp(_CRAFT_GIFTS, members)["ev"] == 0
+
+
+def test_nc_craft_exp_shows_total(_nc_db):
+    assert callbacks.nc_craft_exp([], [], [], []) == []
+    texts = _texts(html.Div(callbacks.nc_craft_exp([1, 2], [], [], [])))
+    assert "製造1回あたりの期待値" in texts
+    assert any(t.endswith(" EXP") for t in texts)
+    assert "3次" in texts

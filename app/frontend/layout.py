@@ -1549,7 +1549,9 @@ def create_node_compare_layout() -> html.Div:
                     "選んだ衣装の中で最も効果が高い衣装に贈ったときの獲得EXPです。"
                     "ノード内の贈り物は等確率で出るため、その平均を期待値とします。"
                     "重みを設定すると 重み × EXP の最大値で比較します"
-                    "（優先して上げたい衣装の重みを大きくする、など）。",
+                    "（優先して上げたい衣装の重みを大きくする、など）。"
+                    "あわせて、1〜3次ノードまで含めた製造1回あたりの期待値も"
+                    "表示します。",
                 ],
                 style={"fontSize": "0.85rem", "color": "#666", "margin": "0 0 16px"},
             ),
@@ -1577,6 +1579,7 @@ def create_node_compare_layout() -> html.Div:
                 ],
                 style={**panel_style, "background": "#f5f5ff"},
             ),
+            html.Div(id="nc-craft-result", className="nc-craft-panel"),
             html.Div(
                 html.Div(
                     id="nc-result",

@@ -26,7 +26,9 @@ from app.backend.user_presets import (
     VALID_PRESENT_TIERS,
 )
 from app.backend.gift_craft import (
+    OFFERED_NODES,
     compare_second_nodes,
+    craft_expected_exp,
     second_node,
 )
 from app.backend.gift_exp import (
@@ -2599,9 +2601,15 @@ def nc_compare(costume_ids, use_weight, weight_values, weight_ids):
             style={"color": "#888", "margin": "8px 0"},
         )
     weighted = bool(use_weight)
+    members = _nc_members(costume_ids, weighted, weight_values, weight_ids)
+    return _nc_result(compare_second_nodes(gifts, members), gifts, weighted)
+
+
+def _nc_members(costume_ids, weighted: bool, weight_values, weight_ids) -> list:
+    """選択中の衣装を compare_second_nodes / craft_expected_exp の members にする。"""
     weights = {i["costume"]: _nc_weight(v) for i, v in zip(weight_ids, weight_values)}
     labels = _nc_costume_labels()
-    members = [
+    return [
         {
             "label": labels.get(cid, str(cid)),
             "weight": weights.get(cid, _NC_DEFAULT_WEIGHT) if weighted else 1.0,
@@ -2609,4 +2617,89 @@ def nc_compare(costume_ids, use_weight, weight_values, weight_ids):
         }
         for cid in costume_ids
     ]
-    return _nc_result(compare_second_nodes(gifts, members), gifts, weighted)
+
+
+def _nc_craft_node_row(node: dict, unit: str) -> html.Div:
+    """製造期待値の内訳: ノード1行（名前・出現率・採用率・期待値）。"""
+    return html.Div(
+        [
+            html.Span(node["name"], className="gl-node nc-node-name"),
+            html.Span(
+                f"出現率 {node['offered'] * 100:.1f}%", className="nc-craft-rate"
+            ),
+            html.Span(f"採用率 {node['pick'] * 100:.1f}%", className="nc-craft-rate"),
+            html.Span(f"{node['ev']:.1f}{unit}", className="nc-gift-value"),
+        ],
+        className="nc-gift-row",
+    )
+
+
+def _nc_craft_result(result: dict, weighted: bool) -> list:
+    """製造1回あたりの期待値。段ごとの内訳を折りたたみで持つ。"""
+    unit = "" if weighted else " EXP"
+    top = max((t["ev"] for t in result["tiers"]), default=0)
+    tiers = []
+    for t in result["tiers"]:
+        pct = t["ev"] / top * 100 if top else 0
+        tiers.append(
+            html.Details(
+                [
+                    html.Summary(
+                        [
+                            html.Span(f"{t['tier']}次", className="nc-node-name"),
+                            html.Span(
+                                html.Span(
+                                    className="nc-bar-fill",
+                                    style={"width": f"{pct:.1f}%"},
+                                ),
+                                className="nc-bar",
+                            ),
+                            html.Strong(f"{t['ev']:.1f}{unit}", className="nc-ev"),
+                        ],
+                        className="nc-summary",
+                    ),
+                    html.Div(
+                        [_nc_craft_node_row(n, unit) for n in t["nodes"]],
+                        className="nc-gifts",
+                    ),
+                ],
+                className="nc-node",
+            )
+        )
+    return [
+        html.Div(
+            [
+                html.Strong("製造1回あたりの期待値"),
+                html.Strong(f"{result['ev']:.1f}{unit}", className="nc-craft-total"),
+            ],
+            className="nc-craft-head",
+        ),
+        html.P(
+            f"1〜3次の各段で候補のノードが{OFFERED_NODES}つ出て、その中から"
+            "期待値が最も高いノードを選んだときの、3段分の贈り物の"
+            + ("期待値（重み × EXP）" if weighted else "絆EXP期待値")
+            + "です。段をクリックすると、贈り物が出るノードごとに、候補に出る確率"
+            "（出現率）、実際に選ばれる確率（採用率）、期待値を表示します。",
+            style={"fontSize": "0.8rem", "color": "#888", "margin": "4px 0 8px"},
+        ),
+        *tiers,
+    ]
+
+
+@callback(
+    Output("nc-craft-result", "children"),
+    Input("nc-costume-dropdown", "value"),
+    Input("nc-use-weight", "value"),
+    Input({"type": "nc-weight", "costume": ALL}, "value"),
+    State({"type": "nc-weight", "costume": ALL}, "id"),
+)
+def nc_craft_exp(costume_ids, use_weight, weight_values, weight_ids):
+    """選択中の衣装で、製造1回あたりの期待値（1〜3次の合計）を計算する。"""
+    if not costume_ids:
+        return []
+    gifts = load_gifts()
+    if not gifts:
+        return []
+    weighted = bool(use_weight)
+    members = _nc_members(costume_ids, weighted, weight_values, weight_ids)
+    return _nc_craft_result(craft_expected_exp(gifts, members), weighted)
