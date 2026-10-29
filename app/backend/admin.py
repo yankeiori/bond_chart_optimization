@@ -17,14 +17,18 @@ from app.backend.user_presets import (
     VALID_PRESENT_TIERS,
     VALID_STATUS_NAMES,
     admin_add_costume,
+    admin_add_costume_furniture,
     admin_delete_preset,
     admin_delete_priority,
     admin_get_costume,
+    admin_load_costume_furniture,
     admin_load_costumes,
+    admin_load_furniture_catalog,
     admin_load_present,
     admin_load_presets,
     admin_load_priorities,
     admin_rebuild_preset,
+    admin_remove_costume_furniture,
     admin_save_present,
     admin_set_preset_approved,
     admin_upsert_priority,
@@ -234,6 +238,7 @@ _STYLE = """
   .tier-none { font-size: 0.8rem; color: #999; padding: 0 4px; }
   .tier-opt:has(input:checked) .tier-none { color: #2980b9; font-weight: bold; }
   .tier-opt:hover { background: #f0f0f0; }
+  .furniture-partners { color: #666; font-size: 0.8rem; }
 </style>
 """
 
@@ -770,6 +775,57 @@ def _present_editor(costume_id: int) -> str:
                        .forEach(function(r){{r.checked=true;}})">
         全て「なし」に</button>
       <button type="submit" class="btn-add">この衣装の好みを保存</button>
+    </form>
+    {_furniture_editor(costume_id)}"""
+
+
+def _furniture_editor(costume_id: int) -> str:
+    """モーション家具の一覧（削除ボタン付き）と追加フォーム。"""
+    items = admin_load_costume_furniture(costume_id)
+    rows = ""
+    for f in items:
+        partners = "、".join(f["partners"]) or "－"
+        fid = "手動登録" if f["id"] < 0 else f["id"]
+        rows += f"""<tr>
+          <td>{escape(f["name"])}</td>
+          <td class="furniture-partners">{escape(partners)}</td>
+          <td class="furniture-partners">{fid}</td>
+          <td>
+            <form method="post" action="/admin/presents/furniture/remove">
+              <input type="hidden" name="costume_id" value="{costume_id}">
+              <input type="hidden" name="furniture_id" value="{f["id"]}">
+              <button type="submit" class="btn-delete">削除</button>
+            </form>
+          </td>
+        </tr>"""
+    if not rows:
+        rows = '<tr><td colspan="4" class="empty">未登録</td></tr>'
+    options = "".join(
+        f'<option value="{escape(f["name"])}">' for f in admin_load_furniture_catalog()
+    )
+    return f"""
+    <h2>モーション家具</h2>
+    <table>
+      <thead><tr>
+        <th>家具</th><th>共通の衣装</th><th>家具ID</th><th></th>
+      </tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+    <form method="post" action="/admin/presents/furniture/add" class="add-form"
+          style="margin-top:12px">
+      <input type="hidden" name="costume_id" value="{costume_id}">
+      家具名:
+      <input type="text" name="name" list="furniture-catalog" required
+             style="width:260px">
+      <datalist id="furniture-catalog">{options}</datalist>
+      家具ID (任意):
+      <input type="number" name="furniture_id" min="1" style="width:90px">
+      <button type="submit" class="btn-add" style="margin-top:0">追加</button>
+      <div class="summary" style="margin:6px 0 0">
+        登録済みの家具は名前で選べます。新しい家具は SchaleDB の家具IDを
+        入れておくと、取り込みスクリプト (scripts/import_furniture.py)
+        のデータとそのまま揃います。IDなしで登録した家具も、取り込み時に
+        同名の家具があれば統合されます。</div>
     </form>"""
 
 
@@ -867,3 +923,41 @@ def admin_present_add_costume():
     return _redirect_presents(
         costume_id, f"「{student} / {costume}」を追加しました。好みを編集できます。"
     )
+
+
+@server.route("/admin/presents/furniture/add", methods=["POST"])
+@_require_login
+def admin_furniture_add():
+    f = request.form
+    costume_id = _parse_costume_id(f.get("costume_id", ""))
+    if costume_id is None:
+        return _redirect_presents(None, "衣装が指定されていません", "err")
+    name = f.get("name", "").strip()
+    if not name:
+        return _redirect_presents(costume_id, "家具名を入力してください", "err")
+    raw_id = f.get("furniture_id", "").strip()
+    furniture_id = _parse_costume_id(raw_id) if raw_id else None
+    if raw_id and (furniture_id is None or furniture_id <= 0):
+        return _redirect_presents(
+            costume_id, "家具IDは正の整数で入力してください", "err"
+        )
+    try:
+        admin_add_costume_furniture(costume_id, name, furniture_id)
+    except Exception as e:
+        return _redirect_presents(costume_id, f"エラー: {e}", "err")
+    return _redirect_presents(costume_id, f"モーション家具「{name}」を追加しました")
+
+
+@server.route("/admin/presents/furniture/remove", methods=["POST"])
+@_require_login
+def admin_furniture_remove():
+    f = request.form
+    costume_id = _parse_costume_id(f.get("costume_id", ""))
+    furniture_id = _parse_costume_id(f.get("furniture_id", ""))
+    if costume_id is None or furniture_id is None:
+        return _redirect_presents(costume_id, "家具が指定されていません", "err")
+    try:
+        admin_remove_costume_furniture(costume_id, furniture_id)
+    except Exception as e:
+        return _redirect_presents(costume_id, f"エラー: {e}", "err")
+    return _redirect_presents(costume_id, "モーション家具を削除しました")

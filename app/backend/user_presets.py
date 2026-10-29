@@ -133,11 +133,41 @@ def _ensure_present_table() -> None:
             _logger.exception("present table creation skipped")
 
 
+def _ensure_furniture_tables() -> None:
+    """モーション家具 (furniture / costume_furniture) テーブルを用意する。
+
+    furniture.id は SchaleDB の家具 ID。データは
+    scripts/import_furniture.py で SchaleDB から取り込む。
+    """
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        try:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS furniture (
+                    id   INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS costume_furniture (
+                    costume_id   INTEGER NOT NULL
+                        REFERENCES costume(id) ON DELETE CASCADE,
+                    furniture_id INTEGER NOT NULL
+                        REFERENCES furniture(id) ON DELETE CASCADE,
+                    PRIMARY KEY (costume_id, furniture_id)
+                )
+            """)
+        except Exception:
+            # costume 未作成の環境では作成をスキップ。
+            _logger.exception("furniture table creation skipped")
+
+
 if _DATABASE_URL:
     try:
         _ensure_table()
         _ensure_preset_approval()
         _ensure_present_table()
+        _ensure_furniture_tables()
         _logger.info("PostgreSQL backend initialized")
     except Exception:
         _logger.exception("Failed to initialize user_presets table")
@@ -998,6 +1028,49 @@ def get_preset_present(
         return {}
 
 
+def get_preset_furniture(student_name: str, status_name: str) -> dict[str, list[dict]]:
+    """(生徒名, ステータス名) プリセットのモーション家具を
+    {衣装名: [{name, partners}, ...]} で返す。
+
+    partners は同じ家具にモーションがある他の衣装の表示名
+    （優先度 → 生徒名 → 衣装の定義順）。
+    """
+    if not _DATABASE_URL:
+        return {}
+    try:
+        conn = _get_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT c.costume_name, f.id, f.name, "
+                "oc.student_name, oc.costume_name "
+                "FROM costume c "
+                "JOIN bond_bonus bb ON bb.costume_id = c.id "
+                "JOIN costume_furniture cf ON cf.costume_id = c.id "
+                "JOIN furniture f ON f.id = cf.furniture_id "
+                "LEFT JOIN costume_furniture ocf "
+                "  ON ocf.furniture_id = f.id AND ocf.costume_id <> c.id "
+                "LEFT JOIN costume oc ON oc.id = ocf.costume_id "
+                "LEFT JOIN student_priority sp "
+                "  ON sp.student_name = oc.student_name "
+                "WHERE c.student_name = %s AND bb.status_name = %s "
+                "ORDER BY f.id, COALESCE(sp.priority, 1000000), "
+                "oc.student_name, oc.sort_order, oc.id",
+                (student_name, status_name),
+            )
+            rows = cur.fetchall()
+    except Exception:
+        _logger.exception("DB read error")
+        return {}
+    by_costume: dict[str, dict[int, dict]] = {}
+    for costume_name, fid, fname, o_student, o_costume in rows:
+        item = by_costume.setdefault(costume_name, {}).setdefault(
+            fid, {"name": fname, "partners": []}
+        )
+        if o_student is not None:
+            item["partners"].append(_costume_label(o_student, o_costume))
+    return {c: list(items.values()) for c, items in by_costume.items()}
+
+
 # ----------------------------------------------------------------------
 # 管理画面用 (present = 衣装ごとの好み贈り物 の編集)
 # ----------------------------------------------------------------------
@@ -1117,3 +1190,111 @@ def admin_save_present(costume_id: int, mapping: dict[str, str]) -> None:
         raise
     finally:
         conn.autocommit = True
+
+
+# ----------------------------------------------------------------------
+# 管理画面用 (costume_furniture = 衣装ごとのモーション家具 の編集)
+# ----------------------------------------------------------------------
+
+
+def admin_load_furniture_catalog() -> list[dict]:
+    """登録済みの家具を名前順で返す。[{id, name}, ...]"""
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM furniture ORDER BY name, id")
+        return [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+
+
+def admin_load_costume_furniture(costume_id: int) -> list[dict]:
+    """指定衣装のモーション家具を返す。
+
+    [{id, name, partners}, ...]。partners は同じ家具にモーションがある
+    他の衣装の表示名。
+    """
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT f.id, f.name, oc.student_name, oc.costume_name "
+            "FROM costume_furniture cf "
+            "JOIN furniture f ON f.id = cf.furniture_id "
+            "LEFT JOIN costume_furniture ocf "
+            "  ON ocf.furniture_id = f.id AND ocf.costume_id <> cf.costume_id "
+            "LEFT JOIN costume oc ON oc.id = ocf.costume_id "
+            "LEFT JOIN student_priority sp "
+            "  ON sp.student_name = oc.student_name "
+            "WHERE cf.costume_id = %s "
+            "ORDER BY f.id, COALESCE(sp.priority, 1000000), "
+            "oc.student_name, oc.sort_order, oc.id",
+            (costume_id,),
+        )
+        rows = cur.fetchall()
+    items: dict[int, dict] = {}
+    for fid, fname, o_student, o_costume in rows:
+        item = items.setdefault(fid, {"id": fid, "name": fname, "partners": []})
+        if o_student is not None:
+            item["partners"].append(_costume_label(o_student, o_costume))
+    return list(items.values())
+
+
+def admin_add_costume_furniture(
+    costume_id: int, name: str, furniture_id: int | None = None
+) -> int:
+    """衣装にモーション家具を追加し、その家具 ID を返す。
+
+    furniture_id（SchaleDB の家具 ID）を指定した場合はその ID で家具を
+    登録（既存なら名前を更新）する。省略時は同名の家具があればそれを
+    使い、無ければ負の ID で新規登録する（SchaleDB の ID と衝突させない
+    ため。scripts/import_furniture.py が同名の家具を SchaleDB の ID へ
+    統合する）。
+    """
+    conn = _get_conn()
+    conn.autocommit = False
+    try:
+        with conn.cursor() as cur:
+            if furniture_id is None:
+                cur.execute(
+                    "SELECT id FROM furniture WHERE name = %s ORDER BY id DESC",
+                    (name,),
+                )
+                row = cur.fetchone()
+                if row:
+                    furniture_id = row[0]
+                else:
+                    cur.execute(
+                        "SELECT LEAST(COALESCE(MIN(id), 0), 0) - 1 FROM furniture"
+                    )
+                    furniture_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO furniture (id, name) VALUES (%s, %s) "
+                "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+                (furniture_id, name),
+            )
+            cur.execute(
+                "INSERT INTO costume_furniture (costume_id, furniture_id) "
+                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (costume_id, furniture_id),
+            )
+        conn.commit()
+        return furniture_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.autocommit = True
+
+
+def admin_remove_costume_furniture(costume_id: int, furniture_id: int) -> None:
+    """衣装からモーション家具を外す。どの衣装も使わなくなった手動登録
+    （負の ID）の家具はカタログからも削除する。"""
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM costume_furniture WHERE costume_id = %s AND furniture_id = %s",
+            (costume_id, furniture_id),
+        )
+        cur.execute(
+            "DELETE FROM furniture f WHERE f.id = %s AND f.id < 0 "
+            "AND NOT EXISTS "
+            "(SELECT 1 FROM costume_furniture cf WHERE cf.furniture_id = f.id)",
+            (furniture_id,),
+        )
