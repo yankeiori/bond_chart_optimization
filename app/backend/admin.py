@@ -18,6 +18,7 @@ from app.backend.user_presets import (
     VALID_STATUS_NAMES,
     admin_add_costume,
     admin_add_costume_furniture,
+    admin_add_costume_preset,
     admin_delete_preset,
     admin_delete_priority,
     admin_get_costume,
@@ -75,6 +76,8 @@ _ADMIN_PASSWORD = os.environ.get("PRESET_ADMIN_TOKEN", "")
 
 _RANGE_LABELS = [f"{lo}~{hi}" for lo, hi in BOND_RANGES]
 _NUM_RANGES = len(_RANGE_LABELS)
+# 衣装ごとに上がるステータスは2つ。新規追加フォームの初期選択。
+_ADD_DEFAULT_STATUSES = ("攻撃", "HP")
 
 
 def _require_login(f):
@@ -412,23 +415,30 @@ def _render_admin_page(message: str = "", msg_type: str = "ok") -> str:
                 "（公開側では「[未承認]」表示）</div>" + preset_rows
             )
 
+    add_status_rows = ""
+    for k, default_status in enumerate(_ADD_DEFAULT_STATUSES):
+        bonus_inputs = "".join(
+            f'<input type="number" name="add_s{k}_b{j}" value="0" min="0">'
+            for j in range(_NUM_RANGES)
+        )
+        add_status_rows += (
+            '<div class="costume-row">'
+            f'<span style="width:100px;flex-shrink:0">'
+            f"{_status_select(f'add_status_{k}', default_status)}</span>"
+            f"{bonus_inputs}</div>"
+        )
     add_preset = f"""
-    <h2>新規プリセット追加</h2>
+    <h2>新規プリセット追加（衣装ごと）</h2>
     <div class="add-form">
       <form method="post" action="/admin/presets/preset_add" id="add-form">
         <label>生徒名</label>
         <input type="text" name="student_name" required style="width:200px">
-        <label>ステータス名</label>
-        {_status_select("status_name", "攻撃")}
-        <label>衣装</label>
+        <label>衣装名</label>
+        <input type="text" name="costume_name" required style="width:200px">
+        <label>上がるステータスと絆ボーナス</label>
         {_range_header()}
-        <div id="add-costumes" class="costumes">
-          {_costume_row("add", 0)}
-        </div>
-        <button type="button" class="btn-add-costume"
-                onclick="addCostume(document.getElementById('add-costumes'),'add')">
-          + 衣装追加</button>
-        <br>
+        {add_status_rows}
+        <div class="summary">既存の衣装名を指定した場合は、そのステータスの値を上書きします。</div>
         <button type="submit" class="btn-add">追加</button>
       </form>
     </div>"""
@@ -553,20 +563,29 @@ def admin_preset_save():
 @_require_login
 def admin_preset_add():
     f = request.form
-    new_s = f.get("student_name", "").strip()
-    new_st = f.get("status_name", "").strip()
-    if not new_s:
-        return _redirect_msg("生徒名を入力してください", "err")
-    if new_st not in VALID_STATUS_NAMES:
-        return _redirect_msg("ステータス名が不正です", "err")
-    costumes = _parse_costumes(f, "add")
-    if not costumes:
-        return _redirect_msg("衣装を1つ以上入力してください", "err")
+    student = f.get("student_name", "").strip()
+    costume = f.get("costume_name", "").strip()
+    if not student or not costume:
+        return _redirect_msg("生徒名と衣装名を入力してください", "err")
+    bonuses_by_status: dict[str, list[int]] = {}
+    for k in range(len(_ADD_DEFAULT_STATUSES)):
+        status = f.get(f"add_status_{k}", "").strip()
+        if status not in VALID_STATUS_NAMES:
+            return _redirect_msg("ステータス名が不正です", "err")
+        if status in bonuses_by_status:
+            return _redirect_msg("ステータスが重複しています", "err")
+        try:
+            bonuses_by_status[status] = [
+                int(f.get(f"add_s{k}_b{j}") or 0) for j in range(_NUM_RANGES)
+            ]
+        except ValueError:
+            return _redirect_msg("絆ボーナスは整数で入力してください", "err")
     try:
-        admin_rebuild_preset(new_s, new_st, new_s, new_st, costumes)
+        admin_add_costume_preset(student, costume, bonuses_by_status)
     except Exception as e:
         return _redirect_msg(f"エラー: {e}", "err")
-    return _redirect_msg(f"「{new_s}({new_st})」を追加しました")
+    statuses = "・".join(bonuses_by_status)
+    return _redirect_msg(f"「{student}／{costume}」({statuses}) を追加しました")
 
 
 @server.route("/admin/presets/preset_delete", methods=["POST"])
