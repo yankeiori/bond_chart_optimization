@@ -3,8 +3,13 @@
 
 生徒（衣装）ごとにカフェでモーションがある家具を furniture /
 costume_furniture テーブルへ書き込む。衣装は表示名「生徒名（衣装名）」
-（通常衣装は生徒名のみ）で SchaleDB の生徒名と照合する。SchaleDB に
-無い衣装の登録内容は変更しない。
+（通常衣装は生徒名のみ）で SchaleDB の生徒名と照合する。
+
+取り込みは追加のみで、DB にあって SchaleDB に無い割り当て（管理画面で
+登録したもの等）は削除せず一覧表示するだけにする。
+
+管理画面で ID を指定せずに登録した家具は負の ID を持つ。SchaleDB に
+同名の家具があればその ID へ統合し、無ければそのまま残す。
 
 デフォルトはドライラン（差分の表示のみ）。--apply を付けると書き込む。
 
@@ -98,6 +103,29 @@ def _ensure_tables(cur) -> None:
     """)
 
 
+def _merge_manual(cur, names) -> list[tuple[int, int, str]]:
+    """手動登録（負の ID）の家具のうち SchaleDB に同名があるものを
+    SchaleDB の ID へ統合する。統合した [(旧ID, 新ID, 名前)] を返す。"""
+    by_name = {name: fid for fid, name in names.items()}
+    cur.execute("SELECT id, name FROM furniture WHERE id < 0")
+    merged = [(mid, by_name[n], n) for mid, n in cur.fetchall() if n in by_name]
+    for mid, sid, name in merged:
+        cur.execute(
+            "INSERT INTO furniture (id, name) VALUES (%s, %s) "
+            "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+            (sid, name),
+        )
+        cur.execute(
+            "INSERT INTO costume_furniture (costume_id, furniture_id) "
+            "SELECT costume_id, %s FROM costume_furniture WHERE furniture_id = %s "
+            "ON CONFLICT DO NOTHING",
+            (sid, mid),
+        )
+        # costume_furniture の行は ON DELETE CASCADE で消える
+        cur.execute("DELETE FROM furniture WHERE id = %s", (mid,))
+    return merged
+
+
 def _build_plan(cur, by_student, names):
     """SchaleDB と DB 現状の差分から実行計画を作る。"""
     cur.execute("SELECT id, student_name, costume_name FROM costume")
@@ -107,8 +135,6 @@ def _build_plan(cur, by_student, names):
     cur.execute("SELECT costume_id, furniture_id FROM costume_furniture")
     current = set(cur.fetchall())
 
-    # SchaleDB にある衣装は SchaleDB の内容に揃える
-    matched = {cid for label, cid in costumes.items() if label in by_student}
     desired = {
         (costumes[label], fid)
         for label, fids in by_student.items()
@@ -122,7 +148,7 @@ def _build_plan(cur, by_student, names):
             (fid, names[fid]) for fid in used if db_names.get(fid) != names[fid]
         ),
         "add": sorted(desired - current),
-        "remove": sorted(p for p in current - desired if p[0] in matched),
+        "extra": sorted(current - desired),
         "unmatched_db": sorted(label for label in costumes if label not in by_student),
         "id_to_label": id_to_label,
         "names": {**db_names, **names},
@@ -131,14 +157,18 @@ def _build_plan(cur, by_student, names):
 
 def _print_plan(plan) -> None:
     label, names = plan["id_to_label"], plan["names"]
+    if plan["merged"]:
+        print(f"手動登録の家具を SchaleDB の ID へ統合: {len(plan['merged'])} 件")
+        for mid, sid, name in plan["merged"]:
+            print(f"  {name}: {mid} -> {sid}")
     print(f"家具の追加・名前更新: {len(plan['furniture'])} 件")
     for fid, name in plan["furniture"]:
         print(f"  {fid}: {name}")
     print(f"モーション家具の追加: {len(plan['add'])} 件")
     for cid, fid in plan["add"]:
         print(f"  {label[cid]}: {names[fid]}")
-    print(f"モーション家具の削除: {len(plan['remove'])} 件")
-    for cid, fid in plan["remove"]:
+    print(f"SchaleDB に無い割り当て（変更なし）: {len(plan['extra'])} 件")
+    for cid, fid in plan["extra"]:
         print(f"  {label[cid]}: {names.get(fid, fid)}")
     if plan["unmatched_db"]:
         print(
@@ -154,11 +184,6 @@ def _apply_plan(cur, plan) -> None:
             "INSERT INTO furniture (id, name) VALUES (%s, %s) "
             "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
             (fid, name),
-        )
-    for cid, fid in plan["remove"]:
-        cur.execute(
-            "DELETE FROM costume_furniture WHERE costume_id = %s AND furniture_id = %s",
-            (cid, fid),
         )
     for cid, fid in plan["add"]:
         cur.execute(
@@ -200,7 +225,9 @@ def main():
         with conn.cursor() as cur:
             # テーブル作成もトランザクション内なので、ドライランでは残らない
             _ensure_tables(cur)
+            merged = _merge_manual(cur, names)
             plan = _build_plan(cur, by_student, names)
+            plan["merged"] = merged
         _print_plan(plan)
         if not args.apply:
             conn.rollback()

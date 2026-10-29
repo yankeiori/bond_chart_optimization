@@ -1190,3 +1190,111 @@ def admin_save_present(costume_id: int, mapping: dict[str, str]) -> None:
         raise
     finally:
         conn.autocommit = True
+
+
+# ----------------------------------------------------------------------
+# 管理画面用 (costume_furniture = 衣装ごとのモーション家具 の編集)
+# ----------------------------------------------------------------------
+
+
+def admin_load_furniture_catalog() -> list[dict]:
+    """登録済みの家具を名前順で返す。[{id, name}, ...]"""
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM furniture ORDER BY name, id")
+        return [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+
+
+def admin_load_costume_furniture(costume_id: int) -> list[dict]:
+    """指定衣装のモーション家具を返す。
+
+    [{id, name, partners}, ...]。partners は同じ家具にモーションがある
+    他の衣装の表示名。
+    """
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT f.id, f.name, oc.student_name, oc.costume_name "
+            "FROM costume_furniture cf "
+            "JOIN furniture f ON f.id = cf.furniture_id "
+            "LEFT JOIN costume_furniture ocf "
+            "  ON ocf.furniture_id = f.id AND ocf.costume_id <> cf.costume_id "
+            "LEFT JOIN costume oc ON oc.id = ocf.costume_id "
+            "LEFT JOIN student_priority sp "
+            "  ON sp.student_name = oc.student_name "
+            "WHERE cf.costume_id = %s "
+            "ORDER BY f.id, COALESCE(sp.priority, 1000000), "
+            "oc.student_name, oc.sort_order, oc.id",
+            (costume_id,),
+        )
+        rows = cur.fetchall()
+    items: dict[int, dict] = {}
+    for fid, fname, o_student, o_costume in rows:
+        item = items.setdefault(fid, {"id": fid, "name": fname, "partners": []})
+        if o_student is not None:
+            item["partners"].append(_costume_label(o_student, o_costume))
+    return list(items.values())
+
+
+def admin_add_costume_furniture(
+    costume_id: int, name: str, furniture_id: int | None = None
+) -> int:
+    """衣装にモーション家具を追加し、その家具 ID を返す。
+
+    furniture_id（SchaleDB の家具 ID）を指定した場合はその ID で家具を
+    登録（既存なら名前を更新）する。省略時は同名の家具があればそれを
+    使い、無ければ負の ID で新規登録する（SchaleDB の ID と衝突させない
+    ため。scripts/import_furniture.py が同名の家具を SchaleDB の ID へ
+    統合する）。
+    """
+    conn = _get_conn()
+    conn.autocommit = False
+    try:
+        with conn.cursor() as cur:
+            if furniture_id is None:
+                cur.execute(
+                    "SELECT id FROM furniture WHERE name = %s ORDER BY id DESC",
+                    (name,),
+                )
+                row = cur.fetchone()
+                if row:
+                    furniture_id = row[0]
+                else:
+                    cur.execute(
+                        "SELECT LEAST(COALESCE(MIN(id), 0), 0) - 1 FROM furniture"
+                    )
+                    furniture_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO furniture (id, name) VALUES (%s, %s) "
+                "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+                (furniture_id, name),
+            )
+            cur.execute(
+                "INSERT INTO costume_furniture (costume_id, furniture_id) "
+                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (costume_id, furniture_id),
+            )
+        conn.commit()
+        return furniture_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.autocommit = True
+
+
+def admin_remove_costume_furniture(costume_id: int, furniture_id: int) -> None:
+    """衣装からモーション家具を外す。どの衣装も使わなくなった手動登録
+    （負の ID）の家具はカタログからも削除する。"""
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM costume_furniture WHERE costume_id = %s AND furniture_id = %s",
+            (costume_id, furniture_id),
+        )
+        cur.execute(
+            "DELETE FROM furniture f WHERE f.id = %s AND f.id < 0 "
+            "AND NOT EXISTS "
+            "(SELECT 1 FROM costume_furniture cf WHERE cf.furniture_id = f.id)",
+            (furniture_id,),
+        )
