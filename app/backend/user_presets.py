@@ -820,6 +820,53 @@ def admin_rebuild_preset(
         conn.autocommit = True
 
 
+def admin_add_costume_preset(
+    student_name: str, costume_name: str, bonuses_by_status: dict[str, list[int]]
+) -> None:
+    """1衣装分の bond_bonus をステータスごとに登録する（既存なら上書き）。
+
+    新規衣装はその生徒の末尾に並べ、既存衣装は sort_order を保持する。
+    承認状態は既存登録があれば保持し、未登録なら承認済みで作成する。
+    """
+    conn = _get_conn()
+    conn.autocommit = False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO costume (student_name, costume_name, sort_order) "
+                "SELECT %s, %s, COALESCE(MAX(sort_order) + 1, 0) "
+                "FROM costume WHERE student_name = %s "
+                "ON CONFLICT (student_name, costume_name) "
+                "DO UPDATE SET costume_name = EXCLUDED.costume_name "
+                "RETURNING id",
+                (student_name, costume_name, student_name),
+            )
+            costume_id = cur.fetchone()[0]
+            for status_name, bonuses in bonuses_by_status.items():
+                cur.execute(
+                    "INSERT INTO bond_bonus "
+                    "(costume_id, status_name, bond_bonuses) "
+                    "VALUES (%s, %s, %s) "
+                    "ON CONFLICT (costume_id, status_name) "
+                    "DO UPDATE SET bond_bonuses = EXCLUDED.bond_bonuses",
+                    (costume_id, status_name, list(bonuses)),
+                )
+                cur.execute(
+                    "INSERT INTO preset_approval "
+                    "(student_name, status_name, approved) "
+                    "VALUES (%s, %s, TRUE) "
+                    "ON CONFLICT (student_name, status_name) DO NOTHING",
+                    (student_name, status_name),
+                )
+        conn.commit()
+        _invalidate_options_cache()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.autocommit = True
+
+
 def admin_delete_preset(student: str, status: str) -> None:
     conn = _get_conn()
     conn.autocommit = False
