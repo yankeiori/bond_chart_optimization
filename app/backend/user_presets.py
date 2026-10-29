@@ -133,11 +133,41 @@ def _ensure_present_table() -> None:
             _logger.exception("present table creation skipped")
 
 
+def _ensure_furniture_tables() -> None:
+    """モーション家具 (furniture / costume_furniture) テーブルを用意する。
+
+    furniture.id は SchaleDB の家具 ID。データは
+    scripts/import_furniture.py で SchaleDB から取り込む。
+    """
+    conn = _get_conn()
+    with conn.cursor() as cur:
+        try:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS furniture (
+                    id   INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS costume_furniture (
+                    costume_id   INTEGER NOT NULL
+                        REFERENCES costume(id) ON DELETE CASCADE,
+                    furniture_id INTEGER NOT NULL
+                        REFERENCES furniture(id) ON DELETE CASCADE,
+                    PRIMARY KEY (costume_id, furniture_id)
+                )
+            """)
+        except Exception:
+            # costume 未作成の環境では作成をスキップ。
+            _logger.exception("furniture table creation skipped")
+
+
 if _DATABASE_URL:
     try:
         _ensure_table()
         _ensure_preset_approval()
         _ensure_present_table()
+        _ensure_furniture_tables()
         _logger.info("PostgreSQL backend initialized")
     except Exception:
         _logger.exception("Failed to initialize user_presets table")
@@ -996,6 +1026,49 @@ def get_preset_present(
     except Exception:
         _logger.exception("DB read error")
         return {}
+
+
+def get_preset_furniture(student_name: str, status_name: str) -> dict[str, list[dict]]:
+    """(生徒名, ステータス名) プリセットのモーション家具を
+    {衣装名: [{name, partners}, ...]} で返す。
+
+    partners は同じ家具にモーションがある他の衣装の表示名
+    （優先度 → 生徒名 → 衣装の定義順）。
+    """
+    if not _DATABASE_URL:
+        return {}
+    try:
+        conn = _get_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT c.costume_name, f.id, f.name, "
+                "oc.student_name, oc.costume_name "
+                "FROM costume c "
+                "JOIN bond_bonus bb ON bb.costume_id = c.id "
+                "JOIN costume_furniture cf ON cf.costume_id = c.id "
+                "JOIN furniture f ON f.id = cf.furniture_id "
+                "LEFT JOIN costume_furniture ocf "
+                "  ON ocf.furniture_id = f.id AND ocf.costume_id <> c.id "
+                "LEFT JOIN costume oc ON oc.id = ocf.costume_id "
+                "LEFT JOIN student_priority sp "
+                "  ON sp.student_name = oc.student_name "
+                "WHERE c.student_name = %s AND bb.status_name = %s "
+                "ORDER BY f.id, COALESCE(sp.priority, 1000000), "
+                "oc.student_name, oc.sort_order, oc.id",
+                (student_name, status_name),
+            )
+            rows = cur.fetchall()
+    except Exception:
+        _logger.exception("DB read error")
+        return {}
+    by_costume: dict[str, dict[int, dict]] = {}
+    for costume_name, fid, fname, o_student, o_costume in rows:
+        item = by_costume.setdefault(costume_name, {}).setdefault(
+            fid, {"name": fname, "partners": []}
+        )
+        if o_student is not None:
+            item["partners"].append(_costume_label(o_student, o_costume))
+    return {c: list(items.values()) for c, items in by_costume.items()}
 
 
 # ----------------------------------------------------------------------

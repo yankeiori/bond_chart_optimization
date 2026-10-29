@@ -21,6 +21,7 @@ from app.backend.user_presets import (
     load_gifts,
     gift_image_src,
     get_preset_present,
+    get_preset_furniture,
     get_gift_lovers,
     parse_preset_value,
     VALID_PRESENT_TIERS,
@@ -319,12 +320,46 @@ _GS_TIER_ICON = TIER_ICON
 _GS_TIER_LABELS = TIER_LABEL
 
 
-def _gs_present_table(costumes: list[dict], present: dict, gifts: list[dict]):
-    """衣装ごとの好物（normal 以外）を 衣装(縦)×リアクション(横) の表にする。
+def _gs_furniture_cell(items: list[dict]):
+    """モーション家具の欄。家具名と、同じ家具にモーションがある衣装。"""
+    if not items:
+        return "－"
+    return [
+        html.Div(
+            [html.Span(f["name"])]
+            + (
+                [
+                    html.Span(
+                        "（共通: " + "、".join(f["partners"]) + "）",
+                        style={"color": "#666", "fontSize": "0.75rem"},
+                    )
+                ]
+                if f["partners"]
+                else []
+            )
+        )
+        for f in items
+    ]
 
-    present: {衣装名: {gift_id: tier}}。データが無い場合はメッセージを返す。
+
+def _gs_present_table(
+    costumes: list[dict],
+    present: dict,
+    gifts: list[dict],
+    furniture: dict | None = None,
+):
+    """衣装ごとの好物（normal 以外）を 衣装(縦)×リアクション(横) の表にし、
+    末尾にモーション家具の列を付ける。
+
+    present: {衣装名: {gift_id: tier}}。
+    furniture: {衣装名: [{name, partners}]}（get_preset_furniture）。
+    データが無い場合はメッセージを返す。
     """
-    if not any(present.get(c["costume_name"]) for c in costumes):
+    furniture = furniture or {}
+    if not any(
+        present.get(c["costume_name"]) or furniture.get(c["costume_name"])
+        for c in costumes
+    ):
         return html.P(
             "好物データが登録されていません。",
             style={"color": "#888", "margin": "8px 0"},
@@ -343,6 +378,7 @@ def _gs_present_table(costumes: list[dict], present: dict, gifts: list[dict]):
             )
             for t in VALID_PRESENT_TIERS
         ]
+        + [html.Th("モーション家具", style=_TH)]
     )
     rows = []
     for c in costumes:
@@ -371,10 +407,20 @@ def _gs_present_table(costumes: list[dict], present: dict, gifts: list[dict]):
                 if tier_by_gift.get(g["id"]) == t
             ]
             cells.append(html.Td(imgs if imgs else "－", style=_TD))
+        cells.append(
+            html.Td(
+                _gs_furniture_cell(furniture.get(c["costume_name"], [])),
+                style={**_TD, "textAlign": "left"},
+            )
+        )
         rows.append(html.Tr([html.Td(c["costume_name"], style=_TD_LABEL)] + cells))
-    return html.Table(
-        [html.Thead(header), html.Tbody(rows)],
-        style={"borderCollapse": "collapse"},
+    # 家具列の分だけ幅が広がるので、狭い画面では横スクロールさせる
+    return html.Div(
+        html.Table(
+            [html.Thead(header), html.Tbody(rows)],
+            style={"borderCollapse": "collapse"},
+        ),
+        style={"overflowX": "auto"},
     )
 
 
@@ -386,7 +432,12 @@ def _preset_present_children(preset_value, costumes: list[dict]):
             "好物データが登録されていません。",
             style={"color": "#888", "margin": "8px 0"},
         )
-    return _gs_present_table(costumes, get_preset_present(*parsed), load_gifts())
+    return _gs_present_table(
+        costumes,
+        get_preset_present(*parsed),
+        load_gifts(),
+        get_preset_furniture(*parsed),
+    )
 
 
 def _gs_build_view(
@@ -423,7 +474,9 @@ def _gs_build_view(
         qty_by_gift=qty,
         use_by_gift=use,
     )
-    present_children = _gs_present_table(costumes, present, gifts)
+    present_children = _gs_present_table(
+        costumes, present, gifts, get_preset_furniture(student_name, status_name)
+    )
     feedback = html.Span(
         f"「{display_name}」を読み込みました。", style={"color": "#27ae60"}
     )

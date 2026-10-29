@@ -6,6 +6,7 @@
 from app.frontend.callbacks import (
     _gift_inputs_to_maps,
     _gs_costume_rows,
+    _gs_furniture_cell,
     _gs_normalize_order,
     _rb_costume_rows,
     _rb_int_keys,
@@ -247,3 +248,23 @@ class TestGsCostumeRows:
         assert comps[("gs-bond-rank", 1)].value == 33
         assert comps[("gs-bond-remain", 1)].value == 100
         assert comps[("gs-bond-rank", 0)].value == 20
+
+
+class TestGsFurnitureCell:
+    def test_empty(self):
+        assert _gs_furniture_cell([]) == "－"
+
+    def test_partners_listed(self):
+        items = [
+            {"name": "格闘ゲーム機", "partners": ["アリス"]},
+            {"name": "レースゲーム機", "partners": ["トキ", "アリス（メイド）"]},
+            {"name": "植物棚", "partners": []},
+        ]
+        divs = _gs_furniture_cell(items)
+        assert [d.children[0].children for d in divs] == [
+            "格闘ゲーム機",
+            "レースゲーム機",
+            "植物棚",
+        ]
+        assert divs[1].children[1].children == "（共通: トキ、アリス（メイド））"
+        assert len(divs[2].children) == 1  # 共通キャラなしは注記を出さない
