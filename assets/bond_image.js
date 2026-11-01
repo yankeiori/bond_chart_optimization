@@ -1,7 +1,7 @@
 /**
  * 絆ランク管理: 現在の絆ランクの一覧を画像（PNG）で保存する。
  *
- * 絆ランクを設定済みの衣装を、絆ランク10刻み（100〜91, 90〜81, …, 10〜1）の
+ * 絆ランクを設定済みの衣装を、絆ランク10刻み（100, 99〜90, 89〜80, …, 19〜10, 9〜1）の
  * グループに分けて高い順に並べ、生徒画像の右下に絆ランクを重ねて canvas に描く。
  * グループは左端に範囲を書き、1行 _BOND_IMAGE_COLS 人を超えたら折り返す。
  * Dash の clientside_callback として登録される（main.py）。
@@ -50,15 +50,22 @@ function _bondImage_fit(ctx, text, maxW) {
 }
 
 /**
- * 絆ランクの高い順の entries を10刻みのグループ [{top, entries}, ...] に分ける
- * （top はグループの上端の絆ランク: 100, 90, …, 10）。
+ * 絆ランクの高い順の entries を10刻みのグループ [{top, bottom, entries}, ...] に分ける。
+ * ぴったりの値（50 など）は上のグループに含める: 100, 99〜90, 89〜80, …, 19〜10, 9〜1。
  */
 function _bondImage_groups(entries) {
     var groups = [];
     entries.forEach(function (e) {
-        var top = Math.ceil(e.rank / 10) * 10;
+        // 最高の100は単独のグループにする
+        var bottom = Math.floor(e.rank / 10) * 10;
         var g = groups[groups.length - 1];
-        if (!g || g.top !== top) groups.push(g = { top: top, entries: [] });
+        if (!g || g.bottom !== bottom) {
+            groups.push(g = {
+                top: bottom === 100 ? 100 : bottom + 9,
+                bottom: bottom,
+                entries: [],
+            });
+        }
         g.entries.push(e);
     });
     return groups;
@@ -114,11 +121,11 @@ function _bondImage_draw(entries) {
             ctx.lineTo(w - _BOND_IMAGE_PAD, ly);
             ctx.stroke();
         }
-        // グループの範囲（例: 100〜91）
+        // グループの範囲（例: 99〜90。100 は単独）
         ctx.textAlign = "left";
         ctx.fillStyle = "#555";
         ctx.font = "bold 14px " + _BOND_IMAGE_FONT;
-        ctx.fillText(g.top + "〜" + (g.top - 9), _BOND_IMAGE_PAD, gy + _BOND_IMAGE_ICON_H / 2);
+        ctx.fillText(g.top === g.bottom ? String(g.top) : g.top + "〜" + Math.max(g.bottom, 1), _BOND_IMAGE_PAD, gy + _BOND_IMAGE_ICON_H / 2);
         g.entries.forEach(function (e, i) {
             _bondImage_drawCell(
                 ctx, e,
