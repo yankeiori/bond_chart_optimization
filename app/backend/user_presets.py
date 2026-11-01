@@ -718,13 +718,27 @@ def admin_rebuild_preset(
         conn.autocommit = True
 
 
-def admin_add_costume_preset(
-    student_name: str, costume_name: str, bonuses_by_status: dict[str, list[int]]
-) -> None:
-    """1衣装分の bond_bonus をステータスごとに登録する（既存なら上書き）。
+class CostumeExistsError(ValueError):
+    """追加しようとした (生徒名, 衣装名) が既に登録されている。"""
 
-    新規衣装はその生徒の末尾に並べ、既存衣装は sort_order を保持する。
-    承認状態は既存登録があれば保持し、未登録なら承認済みで作成する。
+
+def admin_register_costume(
+    student_name: str,
+    costume_name: str,
+    bonuses_by_status: dict[str, list[int]],
+    present: dict[str, str],
+    furniture: list[tuple[str, int | None]],
+    priority: int | None = None,
+) -> int:
+    """新しい衣装（新しい生徒も可）を、絆ボーナス・好み・モーション家具と
+    まとめて1つのトランザクションで登録する。Returns costume_id。
+
+    既存の (生徒名, 衣装名) は上書きせず CostumeExistsError にする（編集は
+    各管理ページで行う）。衣装はその生徒の末尾に並べ、プリセットの承認状態は
+    既存登録があれば保持し、未登録なら承認済みで作成する。priority は
+    その生徒の表示優先度がまだ無いときだけ登録する。
+    furniture は [(家具名, 家具ID または None), ...]（admin_add_costume_furniture
+    と同じ扱い）。
     """
     conn = _get_conn()
     conn.autocommit = False
@@ -734,19 +748,20 @@ def admin_add_costume_preset(
                 "INSERT INTO costume (student_name, costume_name, sort_order) "
                 "SELECT %s, %s, COALESCE(MAX(sort_order) + 1, 0) "
                 "FROM costume WHERE student_name = %s "
-                "ON CONFLICT (student_name, costume_name) "
-                "DO UPDATE SET costume_name = EXCLUDED.costume_name "
+                "ON CONFLICT (student_name, costume_name) DO NOTHING "
                 "RETURNING id",
                 (student_name, costume_name, student_name),
             )
-            costume_id = cur.fetchone()[0]
+            row = cur.fetchone()
+            if row is None:
+                raise CostumeExistsError(
+                    f"「{student_name}／{costume_name}」は既に登録されています"
+                )
+            costume_id = row[0]
             for status_name, bonuses in bonuses_by_status.items():
                 cur.execute(
                     "INSERT INTO bond_bonus "
-                    "(costume_id, status_name, bond_bonuses) "
-                    "VALUES (%s, %s, %s) "
-                    "ON CONFLICT (costume_id, status_name) "
-                    "DO UPDATE SET bond_bonuses = EXCLUDED.bond_bonuses",
+                    "(costume_id, status_name, bond_bonuses) VALUES (%s, %s, %s)",
                     (costume_id, status_name, list(bonuses)),
                 )
                 cur.execute(
@@ -756,8 +771,18 @@ def admin_add_costume_preset(
                     "ON CONFLICT (student_name, status_name) DO NOTHING",
                     (student_name, status_name),
                 )
+            _replace_present(cur, costume_id, present)
+            for name, furniture_id in furniture:
+                _attach_furniture(cur, costume_id, name, furniture_id)
+            if priority is not None:
+                cur.execute(
+                    "INSERT INTO student_priority (student_name, priority) "
+                    "VALUES (%s, %s) ON CONFLICT (student_name) DO NOTHING",
+                    (student_name, priority),
+                )
         conn.commit()
         _invalidate_options_cache()
+        return costume_id
     except Exception:
         conn.rollback()
         raise
@@ -1059,27 +1084,6 @@ def admin_load_costumes() -> list[dict]:
         ]
 
 
-def admin_add_costume(student_name: str, costume_name: str) -> int:
-    """衣装を新規挿入（既存なら再利用）し、その costume_id を返す。
-
-    present 編集用に、bond_bonus を持たない衣装も作成できる。
-    既存の (生徒名, 衣装名) があればその id をそのまま返す。
-    """
-    conn = _get_conn()
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO costume (student_name, costume_name, sort_order) "
-            "VALUES (%s, %s, 0) "
-            "ON CONFLICT (student_name, costume_name) "
-            "DO UPDATE SET costume_name = EXCLUDED.costume_name "
-            "RETURNING id",
-            (student_name, costume_name),
-        )
-        costume_id = cur.fetchone()[0]
-    _invalidate_options_cache()
-    return costume_id
-
-
 def admin_load_present(costume_id: int) -> dict[str, str]:
     """指定衣装の present を {gift_id: tier} で返す。"""
     conn = _get_conn()
@@ -1105,6 +1109,21 @@ def admin_get_costume(costume_id: int) -> dict | None:
     return {"student_name": row[0], "costume_name": row[1]}
 
 
+def _replace_present(cur, costume_id: int, mapping: dict[str, str]) -> None:
+    """admin_save_present の本体（呼び出し側のトランザクション内で実行する）。"""
+    cur.execute("DELETE FROM present WHERE costume_id = %s", (costume_id,))
+    for gift_id, tier in mapping.items():
+        if tier not in VALID_PRESENT_TIERS:
+            continue
+        cur.execute(
+            "INSERT INTO present "
+            "(costume_id, gift_id, gift_name, gift_type, tier) "
+            "SELECT %s, g.id, g.name, g.gift_type, %s "
+            "FROM gift g WHERE g.id = %s",
+            (costume_id, tier, gift_id),
+        )
+
+
 def admin_save_present(costume_id: int, mapping: dict[str, str]) -> None:
     """衣装の present をフォーム内容で総入れ替えする。
 
@@ -1117,17 +1136,7 @@ def admin_save_present(costume_id: int, mapping: dict[str, str]) -> None:
     conn.autocommit = False
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM present WHERE costume_id = %s", (costume_id,))
-            for gift_id, tier in mapping.items():
-                if tier not in VALID_PRESENT_TIERS:
-                    continue
-                cur.execute(
-                    "INSERT INTO present "
-                    "(costume_id, gift_id, gift_name, gift_type, tier) "
-                    "SELECT %s, g.id, g.name, g.gift_type, %s "
-                    "FROM gift g WHERE g.id = %s",
-                    (costume_id, tier, gift_id),
-                )
+            _replace_present(cur, costume_id, mapping)
         conn.commit()
         _invalidate_options_cache()
     except Exception:
@@ -1181,6 +1190,32 @@ def admin_load_costume_furniture(costume_id: int) -> list[dict]:
     return list(items.values())
 
 
+def _attach_furniture(cur, costume_id: int, name: str, furniture_id: int | None) -> int:
+    """admin_add_costume_furniture の本体（呼び出し側のトランザクション内で実行する）。"""
+    if furniture_id is None:
+        cur.execute(
+            "SELECT id FROM furniture WHERE name = %s ORDER BY id DESC",
+            (name,),
+        )
+        row = cur.fetchone()
+        if row:
+            furniture_id = row[0]
+        else:
+            cur.execute("SELECT LEAST(COALESCE(MIN(id), 0), 0) - 1 FROM furniture")
+            furniture_id = cur.fetchone()[0]
+    cur.execute(
+        "INSERT INTO furniture (id, name) VALUES (%s, %s) "
+        "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+        (furniture_id, name),
+    )
+    cur.execute(
+        "INSERT INTO costume_furniture (costume_id, furniture_id) "
+        "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+        (costume_id, furniture_id),
+    )
+    return furniture_id
+
+
 def admin_add_costume_furniture(
     costume_id: int, name: str, furniture_id: int | None = None
 ) -> int:
@@ -1196,29 +1231,7 @@ def admin_add_costume_furniture(
     conn.autocommit = False
     try:
         with conn.cursor() as cur:
-            if furniture_id is None:
-                cur.execute(
-                    "SELECT id FROM furniture WHERE name = %s ORDER BY id DESC",
-                    (name,),
-                )
-                row = cur.fetchone()
-                if row:
-                    furniture_id = row[0]
-                else:
-                    cur.execute(
-                        "SELECT LEAST(COALESCE(MIN(id), 0), 0) - 1 FROM furniture"
-                    )
-                    furniture_id = cur.fetchone()[0]
-            cur.execute(
-                "INSERT INTO furniture (id, name) VALUES (%s, %s) "
-                "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
-                (furniture_id, name),
-            )
-            cur.execute(
-                "INSERT INTO costume_furniture (costume_id, furniture_id) "
-                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                (costume_id, furniture_id),
-            )
+            furniture_id = _attach_furniture(cur, costume_id, name, furniture_id)
         conn.commit()
         return furniture_id
     except Exception:
