@@ -15,9 +15,6 @@ from app.backend.user_presets import (
     get_status_options_for,
     get_student_options,
     make_preset_value,
-    preset_exists,
-    register_costume_preset,
-    VALID_STATUS_NAMES,
     load_gifts,
     gift_image_src,
     get_preset_present,
@@ -2611,89 +2608,14 @@ def toggle_favorite(n_clicks, dropdown_value, status_value, favorites):
 @callback(
     Output("preset-dropdown", "options"),
     Input("favorites", "data"),
-    Input("submit-preset-status", "data"),
 )
-def render_preset_options(favorites, _submit_status):
+def render_preset_options(favorites):
     if not HAS_DB:
         # JSON フォールバック (旧形式キー)
         return _sort_options_with_favorites(
             get_all_presets_for_dropdown(), favorites or []
         )
     return get_favorite_options(favorites or []) + get_student_options()
-
-
-@callback(
-    Output("submit-feedback", "children"),
-    Output("submit-preset-status", "data"),
-    Input("submit-preset-btn", "submit_n_clicks"),
-    State("submit-character-name", "value"),
-    State("submit-status-name", "value"),
-    State("student-indices", "data"),
-    State({"type": "costume", "index": ALL}, "value"),
-    State({"type": "costume", "index": ALL}, "id"),
-    State({"type": "bond", "range_idx": ALL, "index": ALL}, "value"),
-    State({"type": "bond", "range_idx": ALL, "index": ALL}, "id"),
-    prevent_initial_call=True,
-)
-def submit_preset(
-    n_clicks,
-    char_name,
-    status_name,
-    indices,
-    costume_values,
-    costume_ids,
-    bond_values,
-    bond_ids,
-):
-    if not char_name or not char_name.strip():
-        return (
-            html.Span("生徒名を入力してください。", style={"color": "red"}),
-            no_update,
-        )
-    if status_name not in VALID_STATUS_NAMES:
-        return (
-            html.Span("ステータス名を選択してください。", style={"color": "red"}),
-            no_update,
-        )
-
-    char_name = char_name.strip()
-
-    if preset_exists(char_name, status_name):
-        return (
-            html.Span(
-                f"「{char_name}（{status_name}）」は登録済みです。"
-                "データの修正依頼は、ページ上部の報告フォームからお願いします。",
-                style={"color": "red"},
-            ),
-            no_update,
-        )
-
-    # 衣装データを組み立てる
-    idx_order = [cid["index"] for cid in costume_ids]
-    costume_map = {cid["index"]: cv for cv, cid in zip(costume_values, costume_ids)}
-    bond_map = {}
-    for idx in idx_order:
-        bond_map[idx] = [0] * len(BOND_RANGES)
-    for bid, bv in zip(bond_ids, bond_values):
-        bond_map[bid["index"]][bid["range_idx"]] = bv or 0
-
-    costumes = []
-    for idx in idx_order:
-        costumes.append(
-            {
-                "costume_name": costume_map.get(idx) or _default_costume_name(idx),
-                "bond_bonuses": bond_map[idx],
-            }
-        )
-
-    register_costume_preset(char_name, status_name, costumes)
-    return (
-        html.Span(
-            f"「{char_name}（{status_name}）」を投稿しました。",
-            style={"color": "#27ae60"},
-        ),
-        {"submitted": True},
-    )
 
 
 # ======================================================================
@@ -3130,6 +3052,14 @@ def nc_craft_exp(costume_ids, use_weight, weight_values, weight_ids):
 # 絆ランク欄は min/max を付けない（範囲外の値が None になり「空欄 =
 # 未設定に戻す」と区別できなくなるため）。範囲外は保存せず赤枠で示す。
 BM_RANK_STYLE = {"width": "80px", "textAlign": "center"}
+# ラベルと入力欄の組。狭い画面では組ごとに折り返す。
+_BM_FIELD_STYLE = {
+    "display": "inline-flex",
+    "alignItems": "center",
+    "gap": "4px",
+    "whiteSpace": "nowrap",
+    "marginRight": "8px",
+}
 
 
 def _bm_rows(bond_ranks, options: list[dict]) -> list:
@@ -3149,31 +3079,45 @@ def _bm_rows(bond_ranks, options: list[dict]) -> list:
                         o["label"],
                         style={"minWidth": "180px", "display": "inline-block"},
                     ),
-                    html.Span("現在の絆ランク: ", style={"fontSize": "0.8rem"}),
-                    dcc.Input(
-                        id={"type": "bm-rank", "costume": cid},
-                        type="number",
-                        value=e.get("rank"),
-                        debounce=True,
-                        placeholder="未設定",
-                        style=BM_RANK_STYLE,
+                    html.Span(
+                        [
+                            html.Span(
+                                "絆ランク:",
+                                title="現在の絆ランク（空欄なら未設定）",
+                                style={"fontSize": "0.8rem"},
+                            ),
+                            dcc.Input(
+                                id={"type": "bm-rank", "costume": cid},
+                                type="number",
+                                value=e.get("rank"),
+                                debounce=True,
+                                placeholder="未設定",
+                                style=BM_RANK_STYLE,
+                            ),
+                        ],
+                        style=_BM_FIELD_STYLE,
                     ),
                     html.Span(
-                        "次の絆まで残りEXP: ",
-                        style={"fontSize": "0.8rem", "marginLeft": "8px"},
-                        title=(
-                            "次の絆ランクまでの残り経験値（任意）。"
-                            "空欄なら現在ランクの開始（経験値0）として計算。"
-                        ),
-                    ),
-                    dcc.Input(
-                        id={"type": "bm-remain", "costume": cid},
-                        type="number",
-                        min=1,
-                        value=e.get("remain"),
-                        debounce=True,
-                        placeholder="任意",
-                        style={"width": "72px", "textAlign": "center"},
+                        [
+                            html.Span(
+                                "残りEXP:",
+                                title=(
+                                    "次の絆ランクまでの残り経験値（任意）。"
+                                    "空欄なら現在ランクの開始（経験値0）として計算。"
+                                ),
+                                style={"fontSize": "0.8rem"},
+                            ),
+                            dcc.Input(
+                                id={"type": "bm-remain", "costume": cid},
+                                type="number",
+                                min=1,
+                                value=e.get("remain"),
+                                debounce=True,
+                                placeholder="任意",
+                                style={"width": "72px", "textAlign": "center"},
+                            ),
+                        ],
+                        style=_BM_FIELD_STYLE,
                     ),
                 ],
                 id={"type": "bm-row", "costume": cid},

@@ -514,91 +514,6 @@ def create_layout() -> html.Div:
                                     "background": "#f5f5ff",
                                 },
                             ),
-                            # プリセット投稿
-                            html.Details(
-                                [
-                                    html.Summary(
-                                        "プリセット投稿",
-                                        style={
-                                            "cursor": "pointer",
-                                            "fontWeight": "bold",
-                                        },
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                "現在の絆ボーナスの入力内容を、全ユーザーが利用できるプリセットとして共有します。"
-                                                "保存機能ではありません。",
-                                                style={
-                                                    "fontSize": "0.8rem",
-                                                    "color": "#666",
-                                                    "margin": "0 0 8px 0",
-                                                },
-                                            ),
-                                            dcc.Input(
-                                                id="submit-character-name",
-                                                type="text",
-                                                placeholder="生徒名を入力...",
-                                                style={
-                                                    "width": "100%",
-                                                    "marginTop": "6px",
-                                                    "fontSize": "0.85rem",
-                                                },
-                                            ),
-                                            dcc.Dropdown(
-                                                id="submit-status-name",
-                                                options=[
-                                                    {"label": s, "value": s}
-                                                    for s in (
-                                                        "攻撃",
-                                                        "HP",
-                                                        "治癒力",
-                                                        "防御",
-                                                    )
-                                                ],
-                                                placeholder="ステータス名を選択...",
-                                                style={
-                                                    "marginTop": "6px",
-                                                    "fontSize": "0.85rem",
-                                                },
-                                            ),
-                                            dcc.ConfirmDialogProvider(
-                                                html.Button(
-                                                    "投稿",
-                                                    style={
-                                                        "marginTop": "8px",
-                                                        "width": "100%",
-                                                        "background": "#e67e22",
-                                                        "color": "white",
-                                                        "border": "none",
-                                                        "borderRadius": "4px",
-                                                        "padding": "6px 16px",
-                                                        "cursor": "pointer",
-                                                    },
-                                                ),
-                                                id="submit-preset-btn",
-                                                message="プリセットを投稿しますか？",
-                                            ),
-                                            html.Div(
-                                                id="submit-feedback",
-                                                style={
-                                                    "marginTop": "6px",
-                                                    "fontSize": "0.8rem",
-                                                },
-                                            ),
-                                        ],
-                                        style={"marginTop": "8px"},
-                                    ),
-                                ],
-                                className="submit-section",
-                                style={
-                                    "padding": "10px",
-                                    "border": "1px solid #ddd",
-                                    "borderRadius": "8px",
-                                    "background": "#fff8f0",
-                                    "marginTop": "12px",
-                                },
-                            ),
                         ],
                         className="sidebar",
                         style={
@@ -818,7 +733,6 @@ def create_layout() -> html.Div:
             dcc.Store(id="student-indices", data=[0]),
             dcc.Store(id="next-student-index", data=1),
             dcc.Store(id="solver-inputs"),
-            dcc.Store(id="submit-preset-status"),
             dcc.Store(id="costume-priority-order", data=[{"idx": 0, "name": "衣装1"}]),
             dcc.Store(id="autosave", storage_type="local"),
             # 復元完了フラグ: False の間は autosave への保存をブロックする
@@ -1003,25 +917,6 @@ def create_gift_simulator_layout() -> html.Div:
             html.Div(
                 [
                     html.Strong("プリセット"),
-                    html.P(
-                        [
-                            "プリセットの追加は",
-                            dcc.Link(
-                                "絆上げ優先度計算機",
-                                href="/chart-opt",
-                                style={
-                                    "color": "#4a90d9",
-                                    "textDecoration": "underline",
-                                },
-                            ),
-                            "から行ってください。",
-                        ],
-                        style={
-                            "fontSize": "0.8rem",
-                            "color": "#666",
-                            "margin": "6px 0 0 0",
-                        },
-                    ),
                     html.Div(
                         dcc.Dropdown(
                             id="gs-preset-dropdown",
@@ -1716,8 +1611,7 @@ def create_bond_ranks_layout() -> html.Div:
                                 value="",
                                 placeholder="生徒名・衣装名で絞り込み...",
                                 style={
-                                    "flex": "1",
-                                    "minWidth": "0",
+                                    "flex": "1 1 220px",
                                     "maxWidth": "320px",
                                     "padding": "6px 8px",
                                 },

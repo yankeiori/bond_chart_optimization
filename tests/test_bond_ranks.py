@@ -161,10 +161,12 @@ class TestBmRows:
         options = [{"value": 1, "label": "ホシノ"}, {"value": 2, "label": "ノア"}]
         rows = _bm_rows(data, options)
         assert [r.children[0].children for r in rows] == ["ホシノ", "ノア"]
-        assert rows[0].children[2].value is None  # 未設定
-        assert rows[1].children[2].id == {"type": "bm-rank", "costume": 2}
-        assert rows[1].children[2].value == 30
-        assert rows[1].children[4].value == 4
+        rank = [r.children[1].children[1] for r in rows]
+        remain = [r.children[2].children[1] for r in rows]
+        assert rank[0].value is None  # 未設定
+        assert rank[1].id == {"type": "bm-rank", "costume": 2}
+        assert rank[1].value == 30
+        assert remain[1].value == 4
 
     def test_no_options(self):
         assert "衣装データがありません" in _bm_rows(None, []).children
