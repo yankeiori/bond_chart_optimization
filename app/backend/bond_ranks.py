@@ -108,6 +108,46 @@ def apply_page_edits(data, rank_by_costume: dict, remain_by_costume: dict) -> di
     )
 
 
+def merge_ocr_cards(cards) -> list[dict]:
+    """スクリーンショットの読み取り結果（カードごと）を衣装ごとにまとめる。
+
+    cards は assets/bond_ocr.js の出力 [{"costume_id", "rank", "uncertain"}, ...]
+    （ブラウザからの値なので検証する）。スクロールして撮った画像の重なりで
+    同じ衣装が複数回読まれたときは、確実に読めた値を優先して 1 つにまとめ、
+    読んだ値が食い違えば要確認にする（別の衣装を取り違えた可能性がある）。MAX_RANK を超える絆ランクは
+    MAX_RANK にする。Returns 読み取り順の
+    [{"costume_id", "rank", "read": 読み取った値, "uncertain"}]
+    （数字が読めなかった衣装は rank / read が None で要確認）。
+    """
+    if not isinstance(cards, list):
+        return []
+    readings: dict[int, list[tuple[int | None, bool]]] = {}
+    for c in cards:
+        if not isinstance(c, dict):
+            continue
+        cid = _to_int(c.get("costume_id"))
+        if cid is None:
+            continue
+        read = _to_int(c.get("rank"))
+        if read is not None and read < MIN_RANK:
+            read = None
+        uncertain = bool(c.get("uncertain")) or read is None
+        readings.setdefault(cid, []).append((read, uncertain))
+    out = []
+    for cid, rs in readings.items():
+        certain = [r for r, u in rs if not u]
+        read = certain[0] if certain else rs[0][0]
+        out.append(
+            {
+                "costume_id": cid,
+                "rank": None if read is None else min(read, MAX_RANK),
+                "read": read,
+                "uncertain": not certain or len({r for r, _ in rs}) > 1,
+            }
+        )
+    return out
+
+
 def ranks_for_costumes(data, costume_ids) -> tuple[dict[int, int], dict[int, int]]:
     """costume_id の並びに対して、保存済みの衣装の 絆ランク / 残りEXP を
     {並びの index: 値} で返す（各ページの入力欄の初期値に使う）。

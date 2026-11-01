@@ -48,12 +48,14 @@ from app.backend.gift_solver import (
 )
 from app.backend.bond_ranks import (
     apply_page_edits,
+    merge_ocr_cards,
     normalize_bond_ranks,
     ranks_for_costumes,
     save_bond_ranks,
     valid_rank,
 )
 from app.frontend.layout import (
+    BOND_RANKS_BTN_STYLE,
     make_student_card,
     _make_bond_rank_input,
     _default_costume_name,
@@ -3245,6 +3247,7 @@ def _bm_rows(bond_ranks, options: list[dict]) -> list:
 
 @callback(
     Output("bm-container", "children"),
+    Output("bm-ocr-refs", "data"),
     Input("bm-init", "n_intervals"),
     State("bond-ranks", "data"),
     prevent_initial_call=True,
@@ -3253,9 +3256,12 @@ def bm_render(_n, bond_ranks):
     """保存データを読んで全衣装の行を描画する（ページ表示時に1回）。
 
     入力値の保存は bm_save_edits が行う。入力のたびに行を再生成すると
-    フォーカスを失うため、描画はここだけで行う。
+    フォーカスを失うため、描画はここだけで行う。あわせて、スクリーンショット
+    読み取りで照合する衣装（生徒画像のある衣装）の [[衣装ID, 表示名], ...] を返す。
     """
-    return _bm_rows(bond_ranks, get_costume_options())
+    options = get_costume_options()
+    refs = [[o["value"], o["label"]] for o in options if o["label"] in _STUDENT_ICONS]
+    return _bm_rows(bond_ranks, options), refs
 
 
 @callback(
@@ -3284,3 +3290,188 @@ def bm_save_edits(rank_values, remain_values, rank_ids, remain_ids, bond_ranks):
     if saved["costumes"] == normalize_bond_ranks(bond_ranks):
         return no_update, count
     return saved, count
+
+
+def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
+    """スクリーンショットの読み取り結果（assets/bond_ocr.js）の
+    状態メッセージと確認表。Returns (状態メッセージ, 確認表)。
+
+    確認表の絆ランク欄は修正でき、空欄にした衣装は反映しない。
+    要確認の衣装を先に並べる。
+    """
+    if not isinstance(result, dict):
+        raise PreventUpdate
+    if result.get("error"):
+        return (
+            html.Span("画像の読み取りに失敗しました。", style={"color": "red"}),
+            [],
+        )
+    labels = {o["value"]: o["label"] for o in options}
+    entries = [
+        e for e in merge_ocr_cards(result.get("cards")) if e["costume_id"] in labels
+    ]
+    notes = []
+    if result.get("failed"):
+        notes.append(
+            f"生徒のカードが見つからなかった画像が {result['failed']} 枚あります。"
+        )
+    if result.get("partial"):
+        notes.append(
+            f"画面の端で切れていたカード {result['partial']} 枚は読み取っていません。"
+        )
+    if not entries:
+        return (
+            html.Span(
+                ["絆ランクを読み取れませんでした。", *notes], style={"color": "red"}
+            ),
+            [],
+        )
+    n_uncertain = sum(e["uncertain"] for e in entries)
+    status = html.Span(
+        [
+            f"{len(entries)} 衣装を読み取りました",
+            f"（要確認 {n_uncertain}）" if n_uncertain else "",
+            "。内容を確認して「絆ランク管理に反映」を押してください。",
+            *notes,
+        ]
+    )
+    saved = {e["costume_id"]: e["rank"] for e in normalize_bond_ranks(bond_ranks)}
+    rows = []
+    for e in sorted(entries, key=lambda e: not e["uncertain"]):
+        cid = e["costume_id"]
+        note = []
+        if e["uncertain"]:
+            note.append(
+                html.Span("要確認", style={"color": "#c0392b", "fontWeight": "bold"})
+            )
+        if e["read"] is not None and e["read"] != e["rank"]:
+            note.append(f"（読み取り値 {e['read']}）")
+        rows.append(
+            html.Div(
+                [
+                    html.Strong(
+                        _with_student_icon(labels[cid]),
+                        style={"minWidth": "210px", "display": "inline-block"},
+                    ),
+                    html.Span(
+                        [
+                            html.Span("絆ランク:", style={"fontSize": "0.8rem"}),
+                            dcc.Input(
+                                id={"type": "bm-ocr-rank", "costume": cid},
+                                type="number",
+                                value=e["rank"],
+                                placeholder="反映しない",
+                                style=BM_RANK_STYLE,
+                            ),
+                        ],
+                        style=_BM_FIELD_STYLE,
+                    ),
+                    html.Span(
+                        f"現在: {saved.get(cid, '未設定')}",
+                        style={
+                            "fontSize": "0.8rem",
+                            "color": "#888",
+                            "marginRight": "8px",
+                        },
+                    ),
+                    *note,
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "4px",
+                    "flexWrap": "wrap",
+                    "padding": "6px 4px",
+                    "borderBottom": "1px solid #eee",
+                    "background": "#fff3f3" if e["uncertain"] else None,
+                },
+            )
+        )
+    preview = [
+        html.Div(rows, style={"margin": "8px 0"}),
+        html.Button(
+            "絆ランク管理に反映",
+            id="bm-ocr-apply-btn",
+            n_clicks=0,
+            title="確認表の絆ランクを下の一覧に反映して保存する（空欄の衣装は反映しない）",
+            style=BOND_RANKS_BTN_STYLE,
+        ),
+    ]
+    return status, preview
+
+
+@callback(
+    Output("bm-ocr-status", "children"),
+    Output("bm-ocr-preview", "children"),
+    Input("bm-ocr-result", "data"),
+    State("bond-ranks", "data"),
+    prevent_initial_call=True,
+)
+def bm_ocr_preview(result, bond_ranks):
+    """スクリーンショットの読み取り結果を確認表にする。"""
+    return _bm_ocr_preview(result, bond_ranks, get_costume_options())
+
+
+def _bm_ocr_apply(
+    ocr_values, ocr_ids, rank_values, rank_ids, remain_values, remain_ids
+):
+    """確認表の絆ランクを一覧の入力欄の値にする。
+
+    Returns (絆ランク欄の値, 残りEXP欄の値, 反映した衣装数)。確認表で空欄・
+    範囲外の衣装は変えない。絆ランクが変わる衣装の残りEXPは空欄にする。
+    """
+    new = {}
+    for v, oid in zip(ocr_values, ocr_ids):
+        rank = valid_rank(v)
+        if rank is not None:
+            new[oid["costume"]] = rank
+    old = {rid["costume"]: v for v, rid in zip(rank_values, rank_ids)}
+    ranks = [new.get(rid["costume"], v) for v, rid in zip(rank_values, rank_ids)]
+    remains = [
+        None
+        if rid["costume"] in new and new[rid["costume"]] != old.get(rid["costume"])
+        else v
+        for v, rid in zip(remain_values, remain_ids)
+    ]
+    return ranks, remains, sum(cid in old for cid in new)
+
+
+@callback(
+    Output({"type": "bm-rank", "costume": ALL}, "value"),
+    Output({"type": "bm-remain", "costume": ALL}, "value"),
+    Output("bm-ocr-status", "children", allow_duplicate=True),
+    Output("bm-ocr-preview", "children", allow_duplicate=True),
+    Input("bm-ocr-apply-btn", "n_clicks"),
+    State({"type": "bm-ocr-rank", "costume": ALL}, "value"),
+    State({"type": "bm-ocr-rank", "costume": ALL}, "id"),
+    State({"type": "bm-rank", "costume": ALL}, "value"),
+    State({"type": "bm-rank", "costume": ALL}, "id"),
+    State({"type": "bm-remain", "costume": ALL}, "value"),
+    State({"type": "bm-remain", "costume": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def bm_ocr_apply(
+    n_clicks, ocr_values, ocr_ids, rank_values, rank_ids, remain_values, remain_ids
+):
+    """確認表の絆ランクを一覧に反映する（保存は bm_save_edits が行う）。"""
+    if not n_clicks or not rank_ids:
+        raise PreventUpdate
+    ranks, remains, n = _bm_ocr_apply(
+        ocr_values, ocr_ids, rank_values, rank_ids, remain_values, remain_ids
+    )
+    if n == 0:
+        return (
+            no_update,
+            no_update,
+            html.Span(
+                "反映できる衣装がありません（絆ランクが空欄・範囲外の衣装は反映しません）。",
+                style={"color": "red"},
+            ),
+            no_update,
+        )
+    return (
+        ranks,
+        remains,
+        html.Span(f"{n} 衣装の絆ランクを反映しました。", style={"color": "#27ae60"}),
+        [],
+    )

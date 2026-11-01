@@ -1605,6 +1605,52 @@ def create_bond_ranks_layout() -> html.Div:
             ),
             html.Div(
                 [
+                    html.Strong("スクリーンショットから読み取り"),
+                    html.P(
+                        "ゲームの「生徒リスト」画面のスクリーンショットから、各生徒の"
+                        "絆ランクを読み取ります。並び順は自由です。スクロールしながら"
+                        "撮った複数枚の画像をまとめて選べます（画面の端で切れている"
+                        "カードは読み取りません）。画像はこのブラウザ内で処理し、"
+                        "サーバーには送信しません。50を超える絆ランクは50として"
+                        "保存します。",
+                        style={
+                            "fontSize": "0.8rem",
+                            "color": "#666",
+                            "margin": "4px 0 8px",
+                        },
+                    ),
+                    dcc.Upload(
+                        id="bm-ocr-upload",
+                        multiple=True,
+                        accept="image/*",
+                        children=html.Div(
+                            [
+                                "画像をドラッグ＆ドロップ、または ",
+                                html.A("ファイルを選択"),
+                            ]
+                        ),
+                        style={
+                            "border": "2px dashed #aac",
+                            "borderRadius": "6px",
+                            "padding": "16px",
+                            "textAlign": "center",
+                            "cursor": "pointer",
+                            "fontSize": "0.9rem",
+                            "color": "#557",
+                        },
+                    ),
+                    html.Div(
+                        id="bm-ocr-status",
+                        style={"marginTop": "8px", "fontSize": "0.85rem"},
+                    ),
+                    html.Div(id="bm-ocr-preview"),
+                    dcc.Store(id="bm-ocr-refs"),
+                    dcc.Store(id="bm-ocr-result"),
+                ],
+                style=panel_style,
+            ),
+            html.Div(
+                [
                     html.Div(
                         [
                             dcc.Input(

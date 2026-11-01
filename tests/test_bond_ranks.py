@@ -1,12 +1,18 @@
 """絆ランク管理のデータ操作のテスト。"""
 
+import pytest
+from dash.exceptions import PreventUpdate
+
 from app.backend.bond_ranks import (
     apply_page_edits,
+    merge_ocr_cards,
     normalize_bond_ranks,
     ranks_for_costumes,
     save_bond_ranks,
 )
 from app.frontend.callbacks import (
+    _bm_ocr_apply,
+    _bm_ocr_preview,
     _bm_rows,
     _co_costume_ids,
     _overlay_bond_ranks,
@@ -170,3 +176,101 @@ class TestBmRows:
 
     def test_no_options(self):
         assert "衣装データがありません" in _bm_rows(None, []).children
+
+
+class TestMergeOcrCards:
+    def test_garbage(self):
+        assert merge_ocr_cards(None) == []
+        assert merge_ocr_cards(["x", {"costume_id": None, "rank": 3}]) == []
+
+    def test_dedupe_prefers_certain_and_caps_rank(self):
+        cards = [
+            {"costume_id": 1, "rank": 31, "uncertain": True},
+            {"costume_id": 2, "rank": 86, "uncertain": False},
+            {"costume_id": 1, "rank": 31, "uncertain": False},  # 重なりで再読
+            {"costume_id": 3, "rank": None, "uncertain": False},
+            {"costume_id": "4", "rank": "0"},
+        ]
+        assert merge_ocr_cards(cards) == [
+            {"costume_id": 1, "rank": 31, "read": 31, "uncertain": False},
+            # 50 を超える値は 50 にする
+            {"costume_id": 2, "rank": 50, "read": 86, "uncertain": False},
+            # 読めなかった数字は要確認
+            {"costume_id": 3, "rank": None, "read": None, "uncertain": True},
+            {"costume_id": 4, "rank": None, "read": None, "uncertain": True},
+        ]
+
+    def test_conflicting_uncertain_reading(self):
+        # 取り違えの可能性があるので、確実な値を使いつつ要確認にする
+        cards = [
+            {"costume_id": 1, "rank": 30, "uncertain": False},
+            {"costume_id": 1, "rank": 1, "uncertain": True},
+        ]
+        assert merge_ocr_cards(cards) == [
+            {"costume_id": 1, "rank": 30, "read": 30, "uncertain": True}
+        ]
+
+    def test_conflicting_certain_readings(self):
+        cards = [
+            {"costume_id": 1, "rank": 30, "uncertain": False},
+            {"costume_id": 1, "rank": 38, "uncertain": False},
+        ]
+        assert merge_ocr_cards(cards) == [
+            {"costume_id": 1, "rank": 30, "read": 30, "uncertain": True}
+        ]
+
+
+class TestBmOcrPreview:
+    OPTIONS = [{"value": 1, "label": "ホシノ"}, {"value": 2, "label": "ノア"}]
+
+    def test_rows_uncertain_first_and_unknown_dropped(self):
+        result = {
+            "cards": [
+                {"costume_id": 1, "rank": 40, "uncertain": False},
+                {"costume_id": 2, "rank": 20, "uncertain": True},
+                {"costume_id": 99, "rank": 20, "uncertain": False},  # 衣装に無い
+            ],
+            "partial": 2,
+        }
+        data = _data({"costume_id": 1, "rank": 35})
+        status, preview = _bm_ocr_preview(result, data, self.OPTIONS)
+        assert "2 衣装を読み取りました" in status.children
+        assert "（要確認 1）" in status.children
+        assert any("切れていたカード 2 枚" in c for c in status.children)
+        rows = preview[0].children
+        inputs = [r.children[1].children[1] for r in rows]
+        assert [i.id["costume"] for i in inputs] == [2, 1]
+        assert [i.value for i in inputs] == [20, 40]
+        assert [r.children[2].children for r in rows] == ["現在: 未設定", "現在: 35"]
+        assert preview[1].id == "bm-ocr-apply-btn"
+
+    def test_nothing_read(self):
+        status, preview = _bm_ocr_preview(
+            {"cards": [], "failed": 1}, None, self.OPTIONS
+        )
+        assert status.style == {"color": "red"}
+        assert preview == []
+
+    def test_error_and_invalid(self):
+        status, _ = _bm_ocr_preview({"error": True}, None, self.OPTIONS)
+        assert "失敗" in status.children
+        with pytest.raises(PreventUpdate):
+            _bm_ocr_preview(None, None, self.OPTIONS)
+
+
+class TestBmOcrApply:
+    def test_sets_ranks_and_clears_changed_remain(self):
+        ids = [{"type": "bm-rank", "costume": c} for c in (1, 2, 3)]
+        remain_ids = [{"type": "bm-remain", "costume": c} for c in (3, 2, 1)]
+        ranks, remains, n = _bm_ocr_apply(
+            [30, None, 12, 99],
+            [{"costume": c} for c in (1, 2, 3, 4)],  # 4 は一覧に無い
+            [30, 20, 10],
+            ids,
+            [7, 8, 9],
+            remain_ids,
+        )
+        assert ranks == [30, 20, 12]
+        # 絆ランクが変わった衣装 3 の残りEXPだけ空欄に
+        assert remains == [None, 8, 9]
+        assert n == 2

@@ -129,6 +129,15 @@ application.clientside_callback(
     State({"type": "bm-rank", "costume": ALL}, "value"),
 )
 
+# --- 絆ランク管理: スクリーンショットの読み取り（画像はブラウザ内で処理） ---
+application.clientside_callback(
+    ClientsideFunction("bond_ocr", "read"),
+    Output("bm-ocr-result", "data"),
+    Input("bm-ocr-upload", "contents"),
+    State("bm-ocr-refs", "data"),
+    prevent_initial_call=True,
+)
+
 # --- 絆ランク管理: 範囲外の絆ランクを赤枠で示す ---
 application.clientside_callback(
     """
