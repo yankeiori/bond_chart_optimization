@@ -185,6 +185,37 @@ def save_user_bond_ranks(user_id: int, data) -> dict:
     return saved
 
 
+def load_all_user_bond_ranks() -> list[dict]:
+    """全ユーザーと保存データ（管理画面の利用状況の集計用）。
+
+    Returns [{"id", "is_admin", "created_at", "last_login_at", "updated_at",
+    "entries"}, ...]。保存したことが無ければ updated_at は None・entries は空。
+    subject は返さず、管理者のアカウントかどうかだけを is_admin で返す。
+    """
+    _ensure_tables()
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT u.id, u.provider, u.subject, u.created_at, u.last_login_at,
+                   b.updated_at, b.data
+            FROM app_users u LEFT JOIN user_bond_ranks b ON b.user_id = u.id
+            ORDER BY u.id
+            """
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "id": uid,
+            "is_admin": is_admin({"provider": provider, "subject": subject}),
+            "created_at": created_at,
+            "last_login_at": last_login_at,
+            "updated_at": updated_at,
+            "entries": normalize_bond_ranks(data),
+        }
+        for uid, provider, subject, created_at, last_login_at, updated_at, data in rows
+    ]
+
+
 # ======================================================================
 # セッション
 # ======================================================================
