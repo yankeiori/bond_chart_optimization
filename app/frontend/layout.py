@@ -1543,10 +1543,14 @@ def _bm_image_modal() -> html.Div:
                     "画像を長押し（PC は右クリック）して保存できます。",
                     style={"color": "#888", "fontSize": "0.85rem", "margin": "0 0 8px"},
                 ),
-                html.Img(
-                    id="bm-image",
-                    alt="絆ランクの一覧",
-                    style={"maxWidth": "100%", "height": "auto"},
+                # 画像だけをスクロールさせ、✕ボタンのある見出しは常に見えるようにする
+                html.Div(
+                    html.Img(
+                        id="bm-image",
+                        alt="絆ランクの一覧",
+                        style={"maxWidth": "100%", "height": "auto"},
+                    ),
+                    style={"flex": "1", "minHeight": "0", "overflowY": "auto"},
                 ),
             ],
             className="manual-modal-content",
