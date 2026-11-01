@@ -4,11 +4,13 @@
 1〜3次の各ノードについて、日本サーバーで実装済みのノードの重みと、
 そのノードで出る贈り物（ノード内の出現率と個数）を取り出す。
 贈り物が出ないノードも、ノード選択の確率計算に要るので重みだけ残す。
+あわせて、家具だけが出るノード（色彩・シリーズ・各色）の★別の内訳も取り出す。
 
 参照するデータ:
     https://schaledb.com/data/crafting.min.json   ノードの重み・報酬グループ
     https://schaledb.com/data/groups.min.json     グループ内のアイテムと確率・個数
     https://schaledb.com/data/jp/items.min.json   贈り物の判定・名前・レアリティ
+    https://schaledb.com/data/jp/furniture.min.json 家具のレアリティ
 
 使い方:
     uv run python scripts/fetch_crafting.py
@@ -29,6 +31,9 @@ _URL = "https://schaledb.com/data/"
 # SchaleDB のサーバー並び (Released / TotalProp): jp, global, cn
 _SERVER = "jp"
 _SERVER_INDEX = 0
+
+# SchaleDB の家具レアリティ -> ★（N = ★1ノーマル家具）
+_FURNITURE_STARS = {"N": 0, "R": 1, "SR": 2, "SSR": 3}
 
 # SchaleDB 表記 -> リポジトリ（DB の gift.name）表記
 _NAME_FIXES: dict[str, str] = {}
@@ -65,12 +70,35 @@ def _node_gifts(node: dict, groups: dict, items: dict) -> list[tuple]:
     return gifts
 
 
-def build() -> list[list[tuple]]:
+def _node_furniture(node: dict, groups: dict, furniture: dict) -> tuple | None:
+    """家具だけが出るノードの★別の内訳 ((★, ノード内の出現率, 最小個数, 最大個数), ...)。
+
+    家具以外も出るノード（明かり・輝き・煌めき）は None。
+    """
+    total = sum(g["Weight"] for g in node["Groups"])
+    rates: dict[tuple, float] = {}
+    for group in node["Groups"]:
+        entries = groups[str(group["GroupId"])]["Items"]
+        chance_sum = sum(e["Chance"] for e in entries)
+        for e in entries:
+            if e["Type"] != "Furniture":
+                return None
+            star = _FURNITURE_STARS[furniture[str(e["Id"])]["Rarity"]]
+            key = (star, e["AmountMin"], e["AmountMax"])
+            rates[key] = (
+                rates.get(key, 0) + group["Weight"] / total * e["Chance"] / chance_sum
+            )
+    return tuple((star, rate, lo, hi) for (star, lo, hi), rate in sorted(rates.items()))
+
+
+def build() -> tuple[list[list[tuple]], dict[int, tuple]]:
     crafting = _fetch("crafting.min.json")
     groups = _fetch("groups.min.json")
     items = _fetch(f"{_SERVER}/items.min.json")
+    furniture = _fetch(f"{_SERVER}/furniture.min.json")
 
     tiers = []
+    furniture_nodes = {}
     for tier in (1, 2, 3):
         nodes = [
             n
@@ -87,6 +115,10 @@ def build() -> list[list[tuple]]:
                 for n in nodes
             ]
         )
+        for n in nodes:
+            rates = _node_furniture(n, groups, furniture)
+            if rates:
+                furniture_nodes[n["Id"]] = rates
 
     missing = sorted(
         {
@@ -99,15 +131,15 @@ def build() -> list[list[tuple]]:
     )
     if missing:
         sys.exit(f"assets/gift に無い贈り物名: {missing}（_NAME_FIXES に追加する）")
-    return tiers
+    return tiers, furniture_nodes
 
 
-def render(tiers: list[list[tuple]]) -> str:
+def render(tiers: list[list[tuple]], furniture_nodes: dict[int, tuple]) -> str:
     lines = [
-        '"""製造（クラフトチェンバー）のノードの重みと、ノードで出る贈り物。',
+        '"""製造（クラフトチェンバー）のノードの重みと、ノードで出る贈り物・家具。',
         "",
         "scripts/fetch_crafting.py が SchaleDB から生成する。手で編集しない。",
-        f"出典: {_URL} (crafting / groups / {_SERVER}/items)",
+        f"出典: {_URL} (crafting / groups / {_SERVER}/items / {_SERVER}/furniture)",
         f"取得日: {date.today().isoformat()} / サーバー: {_SERVER}",
         '"""',
         "",
@@ -127,11 +159,19 @@ def render(tiers: list[list[tuple]]) -> str:
             lines.append("        )),")
         lines.append("    ),")
     lines.append(")")
+    lines += [
+        "",
+        "# 家具だけが出るノード: FURNITURE[ノードID] = ((★, ノード内の出現率, 最小個数, 最大個数), ...)",
+        "FURNITURE = {",
+    ]
+    for node_id, rates in furniture_nodes.items():
+        lines.append(f"    {node_id}: {rates!r},")
+    lines.append("}")
     return "\n".join(lines) + "\n"
 
 
 def main() -> None:
-    _OUT_PATH.write_text(render(build()), encoding="utf-8")
+    _OUT_PATH.write_text(render(*build()), encoding="utf-8")
     subprocess.run(["ruff", "format", str(_OUT_PATH)], check=False)
     print(f"wrote {_OUT_PATH.relative_to(_BASE_DIR)}")
 

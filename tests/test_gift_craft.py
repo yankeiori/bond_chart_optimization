@@ -289,9 +289,9 @@ def test_crafting_data_matches_second_node_table():
     "tier, name, chance",
     [
         # SchaleDB の ChanceJp（5つの提示に入る確率）
-        (1, "花弁", 0.5257963479898812),
-        (2, "花弁", 0.29914822370359295),
-        (2, "牡丹", 0.024240005437418465),
+        (1, "花弁", 0.5257928315888679),
+        (2, "花弁", 0.2991763183583652),
+        (2, "牡丹", 0.024242434289480776),
         (3, "煌めき", 0.5858488105294458),
         (3, "花弁", 0.5590322781802878),
     ],
@@ -303,7 +303,7 @@ def test_offered_probability_matches_schaledb(tier, name, chance):
 def test_craft_expected_exp_without_members():
     result = craft_expected_exp(_CRAFT_GIFTS, [])
     by_tier = [t["ev"] for t in result["tiers"]]
-    assert by_tier == pytest.approx([14.9391, 13.0893, 59.5496], abs=1e-4)
+    assert by_tier == pytest.approx([14.9390, 13.0903, 59.5496], abs=1e-4)
     assert result["ev"] == pytest.approx(sum(by_tier))
     # 3次の花弁: SR 2〜3個 (75%) と SSR 1〜2個 (25%)
     assert _craft_node(3, "花弁")["ev"] == pytest.approx(

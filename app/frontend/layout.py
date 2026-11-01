@@ -11,6 +11,7 @@ from app.backend.accounts import (
     provider_label,
 )
 from app.backend.student import BOND_RANGES
+from app.backend.furniture_craft import GAUGE, furniture_node_ranking
 from app.backend.gift_craft import second_node
 from app.backend.gift_exp import (
     get_effectivity,
@@ -403,7 +404,7 @@ SITE_TITLE = "絆上げ優先度計算機"
 # タブのカテゴリ（見出し, [パス, ...]）。ラベルは PAGES のもの。
 NAV_GROUPS = [
     ("計算ツール", ["/chart-opt", "/gift-simulation", "/required-exp"]),
-    ("調べる", ["/gift-lookup", "/node-compare"]),
+    ("調べる", ["/gift-lookup", "/node-compare", "/furniture-node"]),
     ("マイデータ", ["/bond-ranks"]),
 ]
 
@@ -1323,6 +1324,105 @@ def create_node_compare_layout() -> html.Div:
 
 
 # ======================================================================
+# 家具ノード比較ページ
+# ======================================================================
+
+
+def _fn_star_row(star: dict) -> html.Div:
+    """家具ノードの内訳: ★1行（★・ノード内の出現率・個数・1個のゲージ）。"""
+    label = f"★{star['star']}" if star["star"] else "★1ノーマル"
+    count = (
+        f"{star['min']}個"
+        if star["min"] == star["max"]
+        else f"{star['min']}〜{star['max']}個"
+    )
+    return html.Div(
+        [
+            html.Span(label, className="fn-star"),
+            html.Span(f"{star['rate'] * 100:.1f}%", className="nc-craft-rate"),
+            html.Span(count, className="nc-craft-rate"),
+            html.Span(f"1個 {GAUGE[star['star']]}%", className="nc-gift-name fn-gauge"),
+        ],
+        className="nc-gift-row",
+    )
+
+
+def fn_ranking(tier: int) -> list:
+    """tier 次の家具ノードのランキング。各ノードは★別の内訳を折りたたみで持つ。"""
+    rows = furniture_node_ranking(tier)
+    top = rows[0]["ev"] if rows else 0
+    items = []
+    for rank, row in enumerate(rows, start=1):
+        pct = row["ev"] / top * 100 if top else 0
+        items.append(
+            html.Details(
+                [
+                    html.Summary(
+                        [
+                            html.Span(f"{rank}", className="nc-rank"),
+                            html.Span(row["node"], className="gl-node fn-node-name"),
+                            html.Span(row["category"], className="nc-category"),
+                            html.Span(
+                                html.Span(
+                                    className="nc-bar-fill",
+                                    style={"width": f"{pct:.1f}%"},
+                                ),
+                                className="nc-bar",
+                            ),
+                            html.Strong(f"{row['ev']:.1f}%", className="nc-ev"),
+                        ],
+                        className="nc-summary",
+                    ),
+                    html.Div(
+                        [
+                            *[_fn_star_row(s) for s in row["stars"]],
+                            html.P(
+                                f"このノードの出現率 {row['appear'] * 100:.2f}%",
+                                className="hint",
+                            ),
+                        ],
+                        className="nc-gifts",
+                    ),
+                ],
+                className="nc-node" + (" nc-top" if rank == 1 else ""),
+            )
+        )
+    return items
+
+
+def create_furniture_node_layout() -> html.Div:
+    """製造の家具ノード比較ページ。
+
+    家具だけが出るノード（色彩・シリーズ・各色）を、出る家具を素材として
+    追加投入したときのゲージ増加量の期待値で段ごとに並べる。
+    """
+    return page_container(
+        [
+            page_intro(
+                "製造の家具ノードを、出る家具を素材として追加投入したときの"
+                "ゲージ増加量の期待値で比較します。",
+                f"追加投入したときのゲージ増加量は ★1家具 {GAUGE[1]}%・"
+                f"★2家具 {GAUGE[2]}%・★3家具 {GAUGE[3]}% です（攻略 Wiki"
+                "「製造」の表より）。ノードごとの★の出現率は SchaleDB の"
+                "データを使います。3次は複数個出るため（★2は2〜3個、"
+                "★3は1〜2個）、個数は最小〜最大を等確率として計算します。"
+                "家具以外も出るノード（明かり・輝き・煌めき）は含めません。",
+            ),
+            *[
+                panel(
+                    fn_ranking(tier),
+                    title=f"{tier}次ノード",
+                    hint="行をクリックすると、★ごとの出現率と個数を表示します。"
+                    if tier == 1
+                    else None,
+                )
+                for tier in (1, 2, 3)
+            ],
+        ]
+    )
+
+
+# ======================================================================
 # 絆ランク管理ページ
 # ======================================================================
 
@@ -1534,6 +1634,7 @@ PAGES = {
     "/required-exp": ("必要絆経験値", create_required_exp_layout),
     "/gift-lookup": ("贈り物逆引き", create_gift_lookup_layout),
     "/node-compare": ("2次ノード比較", create_node_compare_layout),
+    "/furniture-node": ("家具ノード比較", create_furniture_node_layout),
     "/bond-ranks": ("絆ランク管理", create_bond_ranks_layout),
 }
 

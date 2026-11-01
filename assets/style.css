@@ -855,6 +855,21 @@ input[type="number"] {
     gap: 4px;
 }
 
+.fn-node-name {
+    flex: 0 1 15em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.fn-star {
+    width: 6em;
+    font-weight: bold;
+}
+.fn-gauge {
+    color: #555;
+}
+
 .nc-craft-panel:not(:empty) {
     padding: 12px;
     border: 1px solid #ccc;
@@ -882,6 +897,9 @@ input[type="number"] {
 @media (max-width: 768px) {
     .nc-category {
         display: none;
+    }
+    .fn-node-name {
+        flex: 1 1 0;
     }
     .nc-gift-target {
         width: auto;
