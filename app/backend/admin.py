@@ -1,17 +1,25 @@
 """プリセット管理画面。
 
-Flask の route として登録される。パスワード保護されたWebページで
+Flask の route として登録される。管理者の Google アカウント
+（環境変数 ADMIN_GOOGLE_SUB）でログインしたときだけ使えるWebページで
 新スキーマ (costume / bond_bonus / student_priority) を編集する。
 """
 
-import os
 from functools import wraps
 from html import escape
 from urllib.parse import quote
 
-from flask import redirect, request, session, url_for
+from flask import abort, redirect, request, url_for
 
 from app import app
+from app.backend.accounts import (
+    admin_google_sub,
+    current_user,
+    enabled_providers,
+    is_admin,
+    pop_auth_error,
+)
+from app.backend.auth import same_origin
 from app.backend.student import BOND_RANGES
 from app.backend.user_presets import (
     VALID_PRESENT_TIERS,
@@ -59,8 +67,6 @@ _GIFT_SELECT_BOX_ID = "gift-select-box"
 
 server = app.server
 
-_ADMIN_PASSWORD = os.environ.get("PRESET_ADMIN_TOKEN", "")
-
 _RANGE_LABELS = [f"{lo}~{hi}" for lo, hi in BOND_RANGES]
 _NUM_RANGES = len(_RANGE_LABELS)
 # 衣装ごとに上がるステータスは2つ。新規追加フォームの初期選択。
@@ -68,28 +74,58 @@ _ADD_DEFAULT_STATUSES = ("攻撃", "HP")
 
 
 def _require_login(f):
+    """管理者の Google アカウントでログインしているときだけ通す。
+
+    管理者の権限はサイト全体のログイン（180日保持）に乗るので、POST は
+    本サイトのページから送られたものだけを受け付ける。
+    """
+
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if not _ADMIN_PASSWORD:
-            return "管理パスワードが設定されていません (PRESET_ADMIN_TOKEN)", 503
-        if not session.get("admin_logged_in"):
+        if not is_admin(current_user()):
             return redirect(url_for("admin_login"))
+        if request.method == "POST" and not same_origin():
+            abort(403)
         return f(*args, **kwargs)
 
     return wrapper
 
 
-@server.route("/admin/login", methods=["GET", "POST"])
-def admin_login():
-    if not _ADMIN_PASSWORD:
-        return "管理パスワードが設定されていません (PRESET_ADMIN_TOKEN)", 503
-    error = ""
-    if request.method == "POST":
-        if request.form.get("password") == _ADMIN_PASSWORD:
-            session["admin_logged_in"] = True
-            return redirect(url_for("admin_presets"))
-        error = "パスワードが正しくありません"
+def _logout_form() -> str:
+    return (
+        '<form method="post" action="/auth/logout" class="logout">'
+        '<button type="submit">ログアウト</button></form>'
+    )
 
+
+def _login_body() -> str:
+    """ログインページの本文（ログイン状態に応じて変える）。"""
+    if "google" not in enabled_providers():
+        return "<p>Google ログインが設定されていません。</p>"
+    user = current_user()
+    error = pop_auth_error()
+    error_html = f"<p class='error'>{escape(error)}</p>" if error else ""
+    if not admin_google_sub():
+        # 未設定のときも、ログインして自分の値を確かめられるようにする
+        error_html += (
+            "<p class='hint'>管理者が設定されていません (ADMIN_GOOGLE_SUB)。</p>"
+        )
+    if user is None:
+        return f"""{error_html}
+  <a class="login-btn" href="/auth/login/google?next=admin">Google でログイン</a>"""
+    # 管理者でないアカウント。自分の subject を出して ADMIN_GOOGLE_SUB の
+    # 設定に使えるようにする（本人にしか見えない、本人の値）。
+    subject = escape(user["subject"]) if user["provider"] == "google" else "－"
+    return f"""{error_html}
+  <p class="error">このアカウントには管理権限がありません。</p>
+  <p class="hint">このアカウントの ADMIN_GOOGLE_SUB の値:<br><code>{subject}</code></p>
+  {_logout_form()}"""
+
+
+@server.route("/admin/login")
+def admin_login():
+    if is_admin(current_user()):
+        return redirect(url_for("admin_presets"))
     return f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -102,32 +138,25 @@ def admin_login():
   .login-box {{ background: #fff; padding: 32px; border-radius: 8px;
                 box-shadow: 0 2px 8px rgba(0,0,0,.1); width: 320px; }}
   h1 {{ font-size: 1.3rem; margin: 0 0 20px; text-align: center; }}
-  input[type=password] {{ width: 100%; padding: 10px; border: 1px solid #ccc;
-                          border-radius: 4px; font-size: 1rem; box-sizing: border-box; }}
-  button {{ width: 100%; padding: 10px; margin-top: 12px; background: #4a90d9;
-            color: #fff; border: none; border-radius: 4px; font-size: 1rem;
-            cursor: pointer; }}
-  button:hover {{ background: #3a7bc8; }}
+  .login-btn {{ display: block; padding: 10px; background: #4a90d9; color: #fff;
+                border-radius: 4px; font-size: 1rem; text-align: center;
+                text-decoration: none; }}
+  .login-btn:hover {{ background: #3a7bc8; }}
   .error {{ color: red; font-size: 0.9rem; margin-top: 8px; }}
+  .hint {{ font-size: 0.85rem; color: #555; }}
+  code {{ word-break: break-all; }}
+  .logout button {{ width: 100%; padding: 10px; margin-top: 12px; background: #888;
+                    color: #fff; border: none; border-radius: 4px; font-size: 1rem;
+                    cursor: pointer; }}
 </style>
 </head>
 <body>
 <div class="login-box">
   <h1>プリセット管理</h1>
-  <form method="post">
-    <input type="password" name="password" placeholder="パスワード" autofocus>
-    <button type="submit">ログイン</button>
-  </form>
-  {"<p class='error'>" + escape(error) + "</p>" if error else ""}
+  {_login_body()}
 </div>
 </body>
 </html>"""
-
-
-@server.route("/admin/logout")
-def admin_logout():
-    session.pop("admin_logged_in", None)
-    return redirect(url_for("admin_login"))
 
 
 # ----------------------------------------------------------------------
@@ -142,9 +171,10 @@ _STYLE = """
   .header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
   h1 { font-size: 1.4rem; margin: 0; }
   h2 { font-size: 1.15rem; color: #333; margin: 26px 0 8px; }
-  .logout { color: #888; text-decoration: none; font-size: 0.9rem;
-            margin-left: auto; }
-  .logout:hover { color: #333; }
+  .logout { margin-left: auto; }
+  .logout button { background: none; border: none; padding: 0; cursor: pointer;
+                   color: #888; font-size: 0.9rem; }
+  .logout button:hover { color: #333; }
   .summary { color: #666; margin-bottom: 12px; font-size: 0.85rem; }
   .msg { padding: 10px; border-radius: 6px; margin: 12px 0; }
   .msg-ok { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
@@ -464,7 +494,7 @@ def _render_admin_page(message: str = "", msg_type: str = "ok") -> str:
     <div class="header">
       <h1>プリセット管理</h1>
       <a href="/admin/presents" class="navlink">好み(present)管理 →</a>
-      <a href="/admin/logout" class="logout">ログアウト</a>
+      {_logout_form()}
     </div>
     {msg_html}
     {priority_section}
@@ -882,7 +912,7 @@ def _render_presents_page(
     <div class="header">
       <h1>好み(present)管理</h1>
       <a href="/admin/presets" class="navlink">← プリセット管理</a>
-      <a href="/admin/logout" class="logout">ログアウト</a>
+      {_logout_form()}
     </div>
     {msg_html}
     {picker}
