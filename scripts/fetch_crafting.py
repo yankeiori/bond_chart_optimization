@@ -88,9 +88,7 @@ def _node_furniture(node: dict, groups: dict, furniture: dict) -> tuple | None:
             rates[key] = (
                 rates.get(key, 0) + group["Weight"] / total * e["Chance"] / chance_sum
             )
-    return tuple(
-        (star, rate, lo, hi) for (star, lo, hi), rate in sorted(rates.items())
-    )
+    return tuple((star, rate, lo, hi) for (star, lo, hi), rate in sorted(rates.items()))
 
 
 def build() -> tuple[list[list[tuple]], dict[int, tuple]]:
