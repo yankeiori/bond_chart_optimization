@@ -1,5 +1,6 @@
 /**
- * 絆ランク管理: 現在の絆ランクの一覧を画像（PNG）で保存する。
+ * 絆ランク管理: 現在の絆ランクの一覧を画像（PNG）にしてページ上（bm-image-modal）に表示する。
+ * ダウンロードはスマホで使えないことがあるため、表示した画像を長押し（PC は右クリック）で保存してもらう。
  *
  * 絆ランクを設定済みの衣装を、絆ランク10刻み（100, 99〜90, 89〜80, …, 19〜10, 9〜1）の
  * グループに分けて高い順に並べ、生徒画像の右下に絆ランクを重ねて canvas に描く。
@@ -82,7 +83,22 @@ function _bondImage_draw(entries) {
     })));
     var rows = 0;
     groups.forEach(function (g) { rows += Math.ceil(g.entries.length / _BOND_IMAGE_COLS); });
-    var w = _BOND_IMAGE_PAD * 2 + _BOND_IMAGE_LABEL_W + cols * _BOND_IMAGE_CELL_W;
+    // 見出し: 「絆ランク」・衣装数・日付
+    var d = new Date();
+    var title = "絆ランク";
+    var titleFont = "bold 18px " + _BOND_IMAGE_FONT;
+    var info = entries.length + " 衣装・" + d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate();
+    var infoFont = "12px " + _BOND_IMAGE_FONT;
+    // 衣装が少なく幅が狭いと見出しと衣装数・日付が重なるため、両方が収まる幅は確保する
+    var mctx = document.createElement("canvas").getContext("2d");
+    mctx.font = titleFont;
+    var headerW = mctx.measureText(title).width + 24;
+    mctx.font = infoFont;
+    headerW += mctx.measureText(info).width;
+    var w = Math.ceil(Math.max(
+        _BOND_IMAGE_PAD * 2 + _BOND_IMAGE_LABEL_W + cols * _BOND_IMAGE_CELL_W,
+        _BOND_IMAGE_PAD * 2 + headerW
+    ));
     var h = _BOND_IMAGE_PAD * 2 + _BOND_IMAGE_TITLE_H + rows * _BOND_IMAGE_CELL_H
         + (groups.length - 1) * _BOND_IMAGE_GROUP_GAP;
     var canvas = document.createElement("canvas");
@@ -94,20 +110,15 @@ function _bondImage_draw(entries) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, w, h);
 
-    // 見出し: 「絆ランク」・衣装数・日付
-    var d = new Date();
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
     ctx.fillStyle = "#333";
-    ctx.font = "bold 18px " + _BOND_IMAGE_FONT;
-    ctx.fillText("絆ランク", _BOND_IMAGE_PAD, _BOND_IMAGE_PAD + 14);
+    ctx.font = titleFont;
+    ctx.fillText(title, _BOND_IMAGE_PAD, _BOND_IMAGE_PAD + 14);
     ctx.textAlign = "right";
     ctx.fillStyle = "#888";
-    ctx.font = "12px " + _BOND_IMAGE_FONT;
-    ctx.fillText(
-        entries.length + " 衣装・" + d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate(),
-        w - _BOND_IMAGE_PAD, _BOND_IMAGE_PAD + 14
-    );
+    ctx.font = infoFont;
+    ctx.fillText(info, w - _BOND_IMAGE_PAD, _BOND_IMAGE_PAD + 14);
 
     var gy = _BOND_IMAGE_PAD + _BOND_IMAGE_TITLE_H;
     groups.forEach(function (g, gi) {
@@ -178,15 +189,30 @@ function _bondImage_drawCell(ctx, e, x0, y0) {
     );
 }
 
+// 表示中の画像の blob URL（次に表示するときに解放する）
+var _bondImage_url = null;
+
+function _bondImage_toUrl(canvas) {
+    return new Promise(function (resolve) {
+        canvas.toBlob(function (blob) {
+            if (_bondImage_url) URL.revokeObjectURL(_bondImage_url);
+            _bondImage_url = URL.createObjectURL(blob);
+            resolve(_bondImage_url);
+        }, "image/png");
+    });
+}
+
 window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.bond_image = {
     /**
-     * 絆ランク管理の保存データ（bond-ranks）を画像にしてダウンロードさせる。
+     * 絆ランク管理の保存データ（bond-ranks）を画像にしてモーダルに表示する。
      * refs は bm-ocr-refs（[[衣装ID, 表示名, 生徒画像があるか], ...]、
-     * 衣装の表示順）。Returns 結果のメッセージ（bm-image-feedback）。
+     * 衣装の表示順）。Returns [画像の URL（bm-image の src）,
+     * モーダルの style（bm-image-modal）, 結果のメッセージ（bm-image-feedback）]。
      */
     save: async function (nClicks, bondRanks, refs) {
-        if (!nClicks) return window.dash_clientside.no_update;
+        var no = window.dash_clientside.no_update;
+        if (!nClicks) return [no, no, no];
         var rankByCostume = {};
         ((bondRanks && bondRanks.costumes) || []).forEach(function (e) {
             if (e && Number.isInteger(e.rank) && !(e.costume_id in rankByCostume)) {
@@ -200,17 +226,14 @@ window.dash_clientside.bond_image = {
                 entries.push({ label: r[1], rank: rank, hasIcon: r[2], order: order });
             }
         });
-        if (!entries.length) return "絆ランクを設定した衣装がありません。";
+        if (!entries.length) return [no, no, "絆ランクを設定した衣装がありません。"];
         // 絆ランクの高い順（同じなら一覧の表示順）
         entries.sort(function (a, b) { return b.rank - a.rank || a.order - b.order; });
         await Promise.all(entries.map(function (e) {
             return (e.hasIcon ? _bondImage_loadIcon(e.label) : Promise.resolve(null))
                 .then(function (im) { e.icon = im; });
         }));
-        var link = document.createElement("a");
-        link.download = "bond_ranks.png";
-        link.href = _bondImage_draw(entries).toDataURL("image/png");
-        link.click();
-        return "";
+        var url = await _bondImage_toUrl(_bondImage_draw(entries));
+        return [url, { display: "flex" }, ""];
     },
 };

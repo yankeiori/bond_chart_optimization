@@ -1514,6 +1514,49 @@ def _bm_ocr_panel() -> html.Div:
     )
 
 
+def _bm_image_modal() -> html.Div:
+    """絆ランクの一覧の画像を表示するモーダル（assets/bond_image.js が描く）。
+    スマホでも保存できるよう、ダウンロードではなく表示して長押しで保存してもらう。"""
+    return html.Div(
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.Strong("絆ランクの画像", style={"fontSize": "1.2rem"}),
+                        html.Button(
+                            "✕",
+                            id="close-bm-image-btn",
+                            n_clicks=0,
+                            className="icon-btn",
+                            style={"marginLeft": "auto"},
+                        ),
+                    ],
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "borderBottom": "1px solid #ddd",
+                        "paddingBottom": "8px",
+                        "marginBottom": "8px",
+                    },
+                ),
+                html.P(
+                    "画像を長押し（PC は右クリック）して保存できます。",
+                    style={"color": "#888", "fontSize": "0.85rem", "margin": "0 0 8px"},
+                ),
+                html.Img(
+                    id="bm-image",
+                    alt="絆ランクの一覧",
+                    style={"maxWidth": "100%", "height": "auto"},
+                ),
+            ],
+            className="manual-modal-content",
+        ),
+        id="bm-image-modal",
+        className="manual-modal-overlay",
+        style={"display": "none"},
+    )
+
+
 def create_bond_ranks_layout() -> html.Div:
     """絆ランク管理ページ。
 
@@ -1604,7 +1647,7 @@ def create_bond_ranks_layout() -> html.Div:
                         id="bm-save-image-btn",
                         className="btn",
                         title="絆ランクを設定済みの衣装を、絆ランクの高い順に"
-                        "1行10人ずつ並べた画像（PNG）を保存する",
+                        "1行10人ずつ並べた画像（PNG）を表示する",
                     )
                 ],
                 className="bm-list-panel",
@@ -1613,6 +1656,7 @@ def create_bond_ranks_layout() -> html.Div:
                 id="bm-search-index", data=bm_search_index(get_costume_options())
             ),
             dcc.Interval(id="bm-init", max_intervals=1, interval=200),
+            _bm_image_modal(),
         ]
     )
 
