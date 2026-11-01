@@ -298,12 +298,12 @@ class TestBmOcrPreview:
         assert "2 衣装を読み取りました" in status.children
         assert "（要確認 1）" in status.children
         assert any("切れていたカード 2 枚" in c for c in status.children)
-        rows = preview[0].children
+        rows = preview[1].children
         inputs = [r.children[1].children[1] for r in rows]
         assert [i.id["costume"] for i in inputs] == [2, 1]
         assert [i.value for i in inputs] == [20, 40]
         assert [r.children[2].children for r in rows] == ["現在: 未設定", "現在: 35"]
-        assert preview[1].id == "bm-ocr-apply-btn"
+        assert preview[0].id == "bm-ocr-apply-btn"
         # 要確認の行にだけカードの切り抜きの置き場所がある
         assert rows[0].children[-1].id == {"type": "bm-ocr-crops", "costume": 2}
         assert not any(
@@ -320,7 +320,7 @@ class TestBmOcrPreview:
         }
         status, preview = _bm_ocr_preview(result, None, self.OPTIONS)
         assert not any("名前が一致しなかったカード" in c for c in status.children)
-        row = preview[0].children[0]
+        row = preview[1].children[0]
         assert row.children[1].children[1].value is None
         notes = [c for c in row.children if isinstance(c, str)]
         assert "（読み取り値 12）" in notes
