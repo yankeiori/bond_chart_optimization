@@ -9,6 +9,9 @@
 
 var _BOND_IMAGE_COLS = 10;
 var _BOND_IMAGE_SCALE = 2;  // 高解像度で描く倍率
+// canvas の画素数の上限。iOS Safari は約1,670万画素を超える canvas を描けない
+// （真っ白になる）ため、超えるときは倍率を下げる
+var _BOND_IMAGE_MAX_PIXELS = 16000000;
 var _BOND_IMAGE_CELL_W = 92;
 var _BOND_IMAGE_CELL_H = 100;
 var _BOND_IMAGE_ICON_W = 64;  // assets/student の画像の大きさ
@@ -76,10 +79,11 @@ function _bondImage_draw(entries) {
     var h = _BOND_IMAGE_PAD * 2 + _BOND_IMAGE_TITLE_H + rows * _BOND_IMAGE_CELL_H
         + (groups.length - 1) * _BOND_IMAGE_GROUP_GAP;
     var canvas = document.createElement("canvas");
-    canvas.width = w * _BOND_IMAGE_SCALE;
-    canvas.height = h * _BOND_IMAGE_SCALE;
+    var scale = Math.min(_BOND_IMAGE_SCALE, Math.sqrt(_BOND_IMAGE_MAX_PIXELS / (w * h)));
+    canvas.width = Math.floor(w * scale);
+    canvas.height = Math.floor(h * scale);
     var ctx = canvas.getContext("2d");
-    ctx.scale(_BOND_IMAGE_SCALE, _BOND_IMAGE_SCALE);
+    ctx.scale(scale, scale);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, w, h);
 
