@@ -1479,6 +1479,7 @@ def create_bond_ranks_layout() -> html.Div:
                             "flexWrap": "wrap",
                         },
                     ),
+                    html.Div(id="bm-image-feedback", className="feedback"),
                     # 一覧は幅に応じて複数列に分け、上から下へ流す。見出しは
                     # 列ごとに出すため上限の列数ぶん用意し、余りは隠す（style.css）
                     html.Div(
@@ -1503,6 +1504,15 @@ def create_bond_ranks_layout() -> html.Div:
                     ),
                 ],
                 title="衣装ごとの絆ランク",
+                actions=[
+                    html.Button(
+                        "画像で保存",
+                        id="bm-save-image-btn",
+                        className="btn",
+                        title="絆ランクを設定済みの衣装を、絆ランクの高い順に"
+                        "1行10人ずつ並べた画像（PNG）を保存する",
+                    )
+                ],
                 className="bm-list-panel",
             ),
             dcc.Store(
