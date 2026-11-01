@@ -276,6 +276,9 @@ def _costume_row(prefix: str, idx: int, costume: dict | None = None) -> str:
     )
     cid = costume.get("costume_id") if costume else None
     if cid:
+        # 既存衣装は ID を送り、改名しても同じ costume 行を更新する
+        # （行を作り直すと present / costume_furniture が CASCADE で消える）
+        inp += f'<input type="hidden" name="{prefix}_cid_{idx}" value="{cid}">'
         inp += (
             f' <a class="present-link" href="/admin/presents?costume_id={cid}" '
             'target="_blank" title="この衣装の好み(present)を編集">好み ↗</a>'
@@ -487,23 +490,37 @@ def _render_admin_page(message: str = "", msg_type: str = "ok") -> str:
 
 
 def _parse_costumes(form, prefix: str) -> list[dict]:
+    """フォームから衣装行を番号順に読み出す。
+
+    途中の行を ✕ で削除すると番号が飛ぶため、連番を前提にせず
+    送られてきた番号をすべて拾う。既存衣装は costume_id も返す。
+    """
+    head = f"{prefix}_cname_"
+    indices = sorted(
+        int(k[len(head) :])
+        for k in form.keys()
+        if k.startswith(head) and k[len(head) :].isdigit()
+    )
     costumes = []
-    idx = 0
-    while True:
-        cname_key = f"{prefix}_cname_{idx}"
-        if cname_key not in form:
-            break
-        cname = form.get(cname_key, "").strip()
-        if cname:
-            bonuses = []
-            for j in range(_NUM_RANGES):
-                raw = form.get(f"{prefix}_b{j}_{idx}", "0")
-                try:
-                    bonuses.append(int(raw) if raw else 0)
-                except ValueError:
-                    bonuses.append(0)
-            costumes.append({"costume_name": cname, "bond_bonuses": bonuses})
-        idx += 1
+    for idx in indices:
+        cname = form.get(f"{head}{idx}", "").strip()
+        if not cname:
+            continue
+        bonuses = []
+        for j in range(_NUM_RANGES):
+            raw = form.get(f"{prefix}_b{j}_{idx}", "0")
+            try:
+                bonuses.append(int(raw) if raw else 0)
+            except ValueError:
+                bonuses.append(0)
+        raw_cid = form.get(f"{prefix}_cid_{idx}", "")
+        costumes.append(
+            {
+                "costume_name": cname,
+                "bond_bonuses": bonuses,
+                "costume_id": int(raw_cid) if raw_cid.isdigit() else None,
+            }
+        )
     return costumes
 
 
