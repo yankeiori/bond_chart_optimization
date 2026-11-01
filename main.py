@@ -60,6 +60,7 @@ application.clientside_callback(
     State({"type": "costume", "index": ALL}, "id"),
     State("costume-priority-order", "data"),
     State("bond50-penalty", "value"),
+    State("co-costume-icons", "data"),
     prevent_initial_call=True,
 )
 
@@ -101,6 +102,56 @@ application.clientside_callback(
     Input("gl-search", "value"),
     State("gl-search-index", "data"),
     State({"type": "gl-gift", "gift": ALL}, "id"),
+)
+
+# --- 絆ランク管理: 生徒名・衣装名 / 設定済み による絞り込み ---
+application.clientside_callback(
+    """
+    function(query, onlySet, index, ids, rankIds, rankValues) {
+        const q = (query || '').trim().toLowerCase();
+        const only = (onlySet || []).indexOf('on') >= 0;
+        const rankByCostume = {};
+        rankIds.forEach(function (id, i) { rankByCostume[id.costume] = rankValues[i]; });
+        return ids.map(function (id) {
+            const s = (index && index[id.costume]) || '';
+            const r = rankByCostume[id.costume];
+            const hit = (!q || s.indexOf(q) >= 0) && (!only || (r !== null && r !== undefined && r !== ''));
+            return hit ? 'bm-row' : 'bm-row bm-hidden';
+        });
+    }
+    """,
+    Output({"type": "bm-row", "costume": ALL}, "className"),
+    Input("bm-search", "value"),
+    Input("bm-only-set", "value"),
+    State("bm-search-index", "data"),
+    State({"type": "bm-row", "costume": ALL}, "id"),
+    State({"type": "bm-rank", "costume": ALL}, "id"),
+    State({"type": "bm-rank", "costume": ALL}, "value"),
+)
+
+# --- 絆ランク管理: スクリーンショットの読み取り（画像はブラウザ内で処理） ---
+application.clientside_callback(
+    ClientsideFunction("bond_ocr", "read"),
+    Output("bm-ocr-result", "data"),
+    Input("bm-ocr-upload", "contents"),
+    State("bm-ocr-refs", "data"),
+    prevent_initial_call=True,
+)
+
+# --- 絆ランク管理: 範囲外の絆ランクを赤枠で示す ---
+application.clientside_callback(
+    """
+    function(values) {
+        const base = {width: '80px', textAlign: 'center'};
+        return values.map(function (v) {
+            const ok = v === null || v === undefined || v === ''
+                || (Number.isInteger(v) && v >= 1 && v <= 50);
+            return ok ? base : Object.assign({}, base, {border: '2px solid red', color: 'red'});
+        });
+    }
+    """,
+    Output({"type": "bm-rank", "costume": ALL}, "style"),
+    Input({"type": "bm-rank", "costume": ALL}, "value"),
 )
 
 # --- マニュアルモーダル開閉 ---

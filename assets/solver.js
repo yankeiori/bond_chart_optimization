@@ -360,7 +360,7 @@ function _solver_spinnerComponent() {
 
 function _solver_calcChartSync(
     rankValues, rankIds, bondValues, bondIds, costumeValues, costumeIds,
-    costumePriorityOrder, bond50Penalty
+    costumePriorityOrder, bond50Penalty, costumeIcons
 ) {
     // --- データ組み立て ---
     var idxOrder = costumeIds.map(function (id) {
@@ -369,6 +369,22 @@ function _solver_calcChartSync(
 
     var costumeNames = costumeValues.map(function (v, i) {
         return v || _solver_defaultCostumeName(costumeIds[i].index);
+    });
+
+    // 列見出しの生徒画像（プリセットから読み込んだ衣装のみ）
+    var headerIconCss = [];
+    costumeIds.forEach(function (id, i) {
+        var src = (costumeIcons || {})[id.index];
+        if (!src) return;
+        headerIconCss.push({
+            selector: 'th.dash-header[data-dash-column="c' + i + '"]',
+            rule:
+                'background-image: url("' + src + '") !important;' +
+                " background-repeat: no-repeat !important;" +
+                " background-position: center 4px !important;" +
+                " background-size: 32px auto !important;" +
+                " padding-top: 42px !important;",
+        });
     });
 
     var rankMap = {};
@@ -503,6 +519,7 @@ function _solver_calcChartSync(
             top: 0,
         },
         style_data_conditional: summaryStyleCond,
+        css: headerIconCss,
         page_size: 200,
     });
 
@@ -555,6 +572,7 @@ function _solver_calcChartSync(
             top: 0,
         },
         style_data_conditional: detailStyleCond,
+        css: headerIconCss,
         page_size: 200,
     });
 
@@ -883,7 +901,8 @@ window.dash_clientside.solver = {
         costumeValues,
         costumeIds,
         costumePriorityOrder,
-        bond50Penalty
+        bond50Penalty,
+        costumeIcons
     ) {
         if (!n_clicks) return [
             window.dash_clientside.no_update,
@@ -947,6 +966,7 @@ window.dash_clientside.solver = {
             costumeIds: costumeIds,
             costumePriorityOrder: priorityOrder,
             bond50Penalty: bond50Penalty || 0,
+            costumeIcons: costumeIcons || {},
         };
 
         return [_solver_spinnerComponent(), inputs];
@@ -969,7 +989,8 @@ window.dash_clientside.solver = {
                         solverInputs.costumeValues,
                         solverInputs.costumeIds,
                         solverInputs.costumePriorityOrder,
-                        solverInputs.bond50Penalty
+                        solverInputs.bond50Penalty,
+                        solverInputs.costumeIcons
                     )
                 );
             }, 50);

@@ -10,7 +10,6 @@ from flask import jsonify, request
 
 from app import app
 from app.backend.user_presets import (
-    save_user_preset,
     approve_preset,
     delete_preset,
     load_user_presets,
@@ -18,8 +17,6 @@ from app.backend.user_presets import (
 
 server = app.server
 _ADMIN_TOKEN = os.environ.get("PRESET_ADMIN_TOKEN", "")
-_MAX_COSTUMES = 10
-_MAX_BONUS = 50
 
 
 def _require_admin(f):
@@ -35,43 +32,6 @@ def _require_admin(f):
         return f(*args, **kwargs)
 
     return wrapper
-
-
-def _validate_costumes(costumes: list) -> str | None:
-    if not isinstance(costumes, list) or not (1 <= len(costumes) <= _MAX_COSTUMES):
-        return f"costumes must be a list of 1-{_MAX_COSTUMES} items"
-    for c in costumes:
-        if not isinstance(c, dict):
-            return "each costume must be a dict"
-        if not isinstance(c.get("costume_name"), str) or not c["costume_name"].strip():
-            return "costume_name is required"
-        bb = c.get("bond_bonuses")
-        if not isinstance(bb, list) or len(bb) != 7:
-            return "bond_bonuses must be a list of 7 integers"
-        for v in bb:
-            if not isinstance(v, int) or v < 0 or v > _MAX_BONUS:
-                return f"bond_bonuses values must be integers 0-{_MAX_BONUS}"
-    return None
-
-
-@server.route("/api/presets/submit", methods=["POST"])
-def api_submit_preset():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"status": "error", "message": "invalid JSON"}), 400
-    char_name = data.get("character_name", "").strip()
-    if not char_name:
-        return jsonify(
-            {"status": "error", "message": "character_name is required"}
-        ), 400
-    costumes = data.get("costumes", [])
-    err = _validate_costumes(costumes)
-    if err:
-        return jsonify({"status": "error", "message": err}), 400
-    for c in costumes:
-        c["costume_name"] = c["costume_name"].strip()
-    key = save_user_preset(char_name, costumes)
-    return jsonify({"status": "ok", "key": key})
 
 
 @server.route("/api/presets/admin", methods=["POST"])

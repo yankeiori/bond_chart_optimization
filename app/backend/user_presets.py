@@ -206,32 +206,6 @@ def load_user_presets() -> dict:
             return _json_read()
 
 
-def save_user_preset(character_name: str, costumes: list[dict]) -> str:
-    """プリセットを保存する。生成されたキーを返す。"""
-    key = f"{character_name}_{int(time.time())}"
-    submitted_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-    if _DATABASE_URL:
-        conn = _get_conn()
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO user_presets (key, character_name, costumes, approved, submitted_at) "
-                "VALUES (%s, %s, %s, %s, %s)",
-                (key, character_name, json.dumps(costumes), False, submitted_at),
-            )
-    else:
-        with _lock:
-            presets = _json_read()
-            presets[key] = {
-                "character_name": character_name,
-                "costumes": costumes,
-                "approved": False,
-                "submitted_at": submitted_at,
-            }
-            _json_write(presets)
-    return key
-
-
 def approve_preset(key: str) -> bool:
     """プリセットを承認する。"""
     if _DATABASE_URL:
@@ -274,7 +248,7 @@ def delete_preset(key: str) -> bool:
 
 
 # ドロップダウン選択肢はページ表示のたびに DB へ往復しないよう
-# 短時間キャッシュする。プリセット投稿・管理画面での編集時は
+# 短時間キャッシュする。管理画面での編集時は
 # _invalidate_options_cache() で即時反映させる（別プロセスの
 # キャッシュは TTL まで古いままになり得る）。
 _OPTIONS_CACHE_TTL = 300.0  # 秒
@@ -316,61 +290,6 @@ _PRESET_VALUE_SEP = "\x1f"
 VALID_STATUS_NAMES = ("攻撃", "HP", "治癒力", "防御")
 
 
-def preset_exists(student_name: str, status_name: str) -> bool:
-    """(生徒名, ステータス名) が登録済みかを返す。"""
-    if not _DATABASE_URL:
-        return False
-    try:
-        conn = _get_conn()
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM costume c "
-                "JOIN bond_bonus bb ON bb.costume_id = c.id "
-                "WHERE c.student_name = %s AND bb.status_name = %s LIMIT 1",
-                (student_name, status_name),
-            )
-            return cur.fetchone() is not None
-    except Exception:
-        _logger.exception("DB read error")
-        return False
-
-
-def register_costume_preset(
-    student_name: str, status_name: str, costumes: list[dict]
-) -> None:
-    """新スキーマ (costume + bond_bonus) へプリセットを登録する。
-
-    既存の (生徒名, 衣装名) は再利用し、(衣装, ステータス名) の
-    bond_bonuses を追加する。
-    """
-    conn = _get_conn()
-    with conn.cursor() as cur:
-        for sort_order, c in enumerate(costumes):
-            cur.execute(
-                "INSERT INTO costume (student_name, costume_name, sort_order) "
-                "VALUES (%s, %s, %s) "
-                "ON CONFLICT (student_name, costume_name) "
-                "DO UPDATE SET costume_name = EXCLUDED.costume_name "
-                "RETURNING id",
-                (student_name, c["costume_name"], sort_order),
-            )
-            costume_id = cur.fetchone()[0]
-            cur.execute(
-                "INSERT INTO bond_bonus (costume_id, status_name, bond_bonuses) "
-                "VALUES (%s, %s, %s) "
-                "ON CONFLICT (costume_id, status_name) DO NOTHING",
-                (costume_id, status_name, list(c["bond_bonuses"])),
-            )
-        # ユーザー投稿は未承認(FALSE)。既存登録があれば現状の承認状態を保持。
-        cur.execute(
-            "INSERT INTO preset_approval (student_name, status_name, approved) "
-            "VALUES (%s, %s, FALSE) "
-            "ON CONFLICT (student_name, status_name) DO NOTHING",
-            (student_name, status_name),
-        )
-    _invalidate_options_cache()
-
-
 # DB接続の有無（UI側でフォールバック時の挙動を切り替える用）。
 HAS_DB = bool(_DATABASE_URL)
 
@@ -405,11 +324,12 @@ def parse_preset_value(dropdown_value: str) -> tuple[str, str] | None:
 
 def _load_costume_grouped() -> dict[tuple[str, str], list[dict]]:
     """costume と bond_bonus を結合し、(生徒名, ステータス名) ごとに
-    [{costume_name, bond_bonuses}, ...] へまとめて返す。"""
+    [{costume_id, costume_name, bond_bonuses}, ...] へまとめて返す。"""
     conn = _get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT c.student_name, bb.status_name, c.costume_name, bb.bond_bonuses "
+            "SELECT c.student_name, bb.status_name, c.id, c.costume_name, "
+            "bb.bond_bonuses "
             "FROM costume c "
             "JOIN bond_bonus bb ON bb.costume_id = c.id "
             "LEFT JOIN student_priority sp ON sp.student_name = c.student_name "
@@ -418,9 +338,10 @@ def _load_costume_grouped() -> dict[tuple[str, str], list[dict]]:
         )
         rows = cur.fetchall()
     grouped: dict[tuple[str, str], list[dict]] = {}
-    for student_name, status_name, costume_name, bond_bonuses in rows:
+    for student_name, status_name, costume_id, costume_name, bond_bonuses in rows:
         grouped.setdefault((student_name, status_name), []).append(
             {
+                "costume_id": costume_id,
                 "costume_name": costume_name,
                 "bond_bonuses": list(bond_bonuses),
             }
@@ -655,8 +576,8 @@ def get_preset_data(dropdown_value: str) -> tuple[str, list[dict]] | None:
     Returns
     -------
     tuple[str, list[dict]] | None
-        (表示名, [{costume_name, bond_bonuses}, ...]) のタプル。
-        見つからなければ None。
+        (表示名, [{costume_id, costume_name, bond_bonuses}, ...]) のタプル。
+        見つからなければ None。DB未接続時（JSON）は costume_id を含まない。
     """
     if not _DATABASE_URL:
         presets = load_user_presets()
@@ -742,6 +663,8 @@ def admin_rebuild_preset(
     """(生徒, ステータス) プリセットをフォーム内容で再構築する。
 
     共有 costume 行は再利用し、対象ステータスの bond_bonus のみ入れ替える。
+    costume_id 付きの衣装（既存衣装）はその行の名前・並びを更新するので、
+    改名しても ID と、それに紐づく present / costume_furniture を保つ。
     どのステータスからも参照されない costume 行は削除する。
     """
     conn = _get_conn()
@@ -755,15 +678,32 @@ def admin_rebuild_preset(
                 (old_student, old_status),
             )
             for i, c in enumerate(costumes):
-                cur.execute(
-                    "INSERT INTO costume (student_name, costume_name, sort_order) "
-                    "VALUES (%s, %s, %s) "
-                    "ON CONFLICT (student_name, costume_name) "
-                    "DO UPDATE SET sort_order = EXCLUDED.sort_order "
-                    "RETURNING id",
-                    (new_student, c["costume_name"], i),
-                )
-                costume_id = cur.fetchone()[0]
+                row = None
+                if c.get("costume_id") is not None:
+                    cur.execute(
+                        "UPDATE costume SET student_name = %s, costume_name = %s, "
+                        "sort_order = %s WHERE id = %s AND student_name = %s "
+                        "RETURNING id",
+                        (
+                            new_student,
+                            c["costume_name"],
+                            i,
+                            c["costume_id"],
+                            old_student,
+                        ),
+                    )
+                    row = cur.fetchone()
+                if row is None:
+                    cur.execute(
+                        "INSERT INTO costume (student_name, costume_name, sort_order) "
+                        "VALUES (%s, %s, %s) "
+                        "ON CONFLICT (student_name, costume_name) "
+                        "DO UPDATE SET sort_order = EXCLUDED.sort_order "
+                        "RETURNING id",
+                        (new_student, c["costume_name"], i),
+                    )
+                    row = cur.fetchone()
+                costume_id = row[0]
                 cur.execute(
                     "INSERT INTO bond_bonus "
                     "(costume_id, status_name, bond_bonuses) "

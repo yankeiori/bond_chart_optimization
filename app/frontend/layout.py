@@ -31,6 +31,64 @@ _PRIVACY_MD = (_BASE_DIR / "docs" / "privacy.md").read_text(encoding="utf-8")
 
 LABEL_STYLE = {"fontSize": "1rem", "whiteSpace": "nowrap"}
 
+# 絆ランク管理との連携ボタン（反映 / 保存）
+BOND_RANKS_BTN_STYLE = {
+    "background": "#4a90d9",
+    "color": "white",
+    "border": "none",
+    "borderRadius": "4px",
+    "padding": "5px 12px",
+    "cursor": "pointer",
+    "fontSize": "0.85rem",
+}
+
+
+def bond_ranks_buttons(prefix: str, auto_note: str) -> list[html.Button]:
+    """「絆ランク管理から反映」「絆ランク管理に保存」ボタンの組。
+
+    id は {prefix}-apply-bond-ranks-btn / {prefix}-save-bond-ranks-btn。
+    auto_note は自動反映されるタイミングの説明（反映ボタンの title）。
+    """
+    return [
+        html.Button(
+            "絆ランク管理から反映",
+            id=f"{prefix}-apply-bond-ranks-btn",
+            n_clicks=0,
+            title=(
+                "絆ランク管理に保存した現在の絆ランク・残りEXPを入力欄に反映する"
+                f"（{auto_note}）"
+            ),
+            style=BOND_RANKS_BTN_STYLE,
+        ),
+        html.Button(
+            "絆ランク管理に保存",
+            id=f"{prefix}-save-bond-ranks-btn",
+            n_clicks=0,
+            title="入力中の現在の絆ランク・残りEXPを絆ランク管理に保存する",
+            style=BOND_RANKS_BTN_STYLE,
+        ),
+    ]
+
+
+def bond_ranks_header(title: str, prefix: str, auto_note: str) -> list:
+    """衣装・絆ランク欄の見出し行（見出し + 反映/保存ボタン）と、
+    ボタンの結果を表示する {prefix}-bond-ranks-feedback。"""
+    return [
+        html.Div(
+            [html.Strong(title), *bond_ranks_buttons(prefix, auto_note)],
+            style={
+                "display": "flex",
+                "alignItems": "center",
+                "gap": "8px",
+                "flexWrap": "wrap",
+            },
+        ),
+        html.Div(
+            id=f"{prefix}-bond-ranks-feedback",
+            style={"marginTop": "4px", "fontSize": "0.85rem"},
+        ),
+    ]
+
 
 def _default_costume_name(index: int) -> str:
     return f"衣装{index + 1}"
@@ -456,91 +514,6 @@ def create_layout() -> html.Div:
                                     "background": "#f5f5ff",
                                 },
                             ),
-                            # プリセット投稿
-                            html.Details(
-                                [
-                                    html.Summary(
-                                        "プリセット投稿",
-                                        style={
-                                            "cursor": "pointer",
-                                            "fontWeight": "bold",
-                                        },
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                "現在の絆ボーナスの入力内容を、全ユーザーが利用できるプリセットとして共有します。"
-                                                "保存機能ではありません。",
-                                                style={
-                                                    "fontSize": "0.8rem",
-                                                    "color": "#666",
-                                                    "margin": "0 0 8px 0",
-                                                },
-                                            ),
-                                            dcc.Input(
-                                                id="submit-character-name",
-                                                type="text",
-                                                placeholder="生徒名を入力...",
-                                                style={
-                                                    "width": "100%",
-                                                    "marginTop": "6px",
-                                                    "fontSize": "0.85rem",
-                                                },
-                                            ),
-                                            dcc.Dropdown(
-                                                id="submit-status-name",
-                                                options=[
-                                                    {"label": s, "value": s}
-                                                    for s in (
-                                                        "攻撃",
-                                                        "HP",
-                                                        "治癒力",
-                                                        "防御",
-                                                    )
-                                                ],
-                                                placeholder="ステータス名を選択...",
-                                                style={
-                                                    "marginTop": "6px",
-                                                    "fontSize": "0.85rem",
-                                                },
-                                            ),
-                                            dcc.ConfirmDialogProvider(
-                                                html.Button(
-                                                    "投稿",
-                                                    style={
-                                                        "marginTop": "8px",
-                                                        "width": "100%",
-                                                        "background": "#e67e22",
-                                                        "color": "white",
-                                                        "border": "none",
-                                                        "borderRadius": "4px",
-                                                        "padding": "6px 16px",
-                                                        "cursor": "pointer",
-                                                    },
-                                                ),
-                                                id="submit-preset-btn",
-                                                message="プリセットを投稿しますか？",
-                                            ),
-                                            html.Div(
-                                                id="submit-feedback",
-                                                style={
-                                                    "marginTop": "6px",
-                                                    "fontSize": "0.8rem",
-                                                },
-                                            ),
-                                        ],
-                                        style={"marginTop": "8px"},
-                                    ),
-                                ],
-                                className="submit-section",
-                                style={
-                                    "padding": "10px",
-                                    "border": "1px solid #ddd",
-                                    "borderRadius": "8px",
-                                    "background": "#fff8f0",
-                                    "marginTop": "12px",
-                                },
-                            ),
                         ],
                         className="sidebar",
                         style={
@@ -581,12 +554,10 @@ def create_layout() -> html.Div:
                             # 現在の絆ランク入力
                             html.Div(
                                 [
-                                    html.Strong(
+                                    *bond_ranks_header(
                                         "現在の絆ランク",
-                                        style={
-                                            "marginBottom": "8px",
-                                            "display": "block",
-                                        },
+                                        "co",
+                                        "プリセット読み込み時は自動で反映",
                                     ),
                                     html.Div(
                                         id="bond-rank-container",
@@ -596,6 +567,7 @@ def create_layout() -> html.Div:
                                             "display": "flex",
                                             "gap": "8px",
                                             "flexWrap": "wrap",
+                                            "marginTop": "8px",
                                         },
                                     ),
                                 ],
@@ -761,13 +733,17 @@ def create_layout() -> html.Div:
             dcc.Store(id="student-indices", data=[0]),
             dcc.Store(id="next-student-index", data=1),
             dcc.Store(id="solver-inputs"),
-            dcc.Store(id="submit-preset-status"),
             dcc.Store(id="costume-priority-order", data=[{"idx": 0, "name": "衣装1"}]),
             dcc.Store(id="autosave", storage_type="local"),
             # 復元完了フラグ: False の間は autosave への保存をブロックする
             # （動的レイアウト挿入時の初期発火で保存データが潰れるのを防ぐ）
             dcc.Store(id="autosave-ready", data=False),
             dcc.Store(id="favorites", storage_type="local", data=[]),
+            # 読み込んだプリセットの衣装 [{costume_name, costume_id}, ...]。
+            # 衣装カードと絆ランク管理の衣装を衣装名で対応付けるのに使う。
+            dcc.Store(id="co-loaded-costumes", data=[]),
+            # 結果表の列見出しに出す生徒画像 {衣装 index: URL}
+            dcc.Store(id="co-costume-icons", data={}),
             dcc.Interval(id="autosave-init", max_intervals=1, interval=200),
             _footer(),
         ],
@@ -943,25 +919,6 @@ def create_gift_simulator_layout() -> html.Div:
             html.Div(
                 [
                     html.Strong("プリセット"),
-                    html.P(
-                        [
-                            "プリセットの追加は",
-                            dcc.Link(
-                                "絆上げ優先度計算機",
-                                href="/chart-opt",
-                                style={
-                                    "color": "#4a90d9",
-                                    "textDecoration": "underline",
-                                },
-                            ),
-                            "から行ってください。",
-                        ],
-                        style={
-                            "fontSize": "0.8rem",
-                            "color": "#666",
-                            "margin": "6px 0 0 0",
-                        },
-                    ),
                     html.Div(
                         dcc.Dropdown(
                             id="gs-preset-dropdown",
@@ -1008,7 +965,11 @@ def create_gift_simulator_layout() -> html.Div:
             # 衣装・上昇量（表示のみ）＋ 現在の絆ランク入力
             html.Div(
                 [
-                    html.Strong("衣装 / 優先順位 / 現在の絆ランク / 絆ボーナス"),
+                    *bond_ranks_header(
+                        "衣装 / 優先順位 / 現在の絆ランク / 絆ボーナス",
+                        "gs",
+                        "読み込み時は自動で反映",
+                    ),
                     html.P(
                         "▲▼ の並び順が優先順位です（上が最優先）。"
                         "絆ボーナス合計・使用個数が同点のとき、"
@@ -1196,7 +1157,11 @@ def create_required_exp_layout() -> html.Div:
             # 追加済み衣装の 現在絆ランク / 目標絆ランク 入力
             html.Div(
                 [
-                    html.Strong("衣装（上ほど優先） / 現在の絆ランク / 目標絆ランク"),
+                    *bond_ranks_header(
+                        "衣装（上ほど優先） / 現在の絆ランク / 目標絆ランク",
+                        "rb",
+                        "衣装の追加時は自動で反映",
+                    ),
                     html.Div(
                         id="rb-costume-container",
                         children=html.P(
@@ -1603,6 +1568,148 @@ def create_node_compare_layout() -> html.Div:
 
 
 # ======================================================================
+# 絆ランク管理ページ
+# ======================================================================
+
+
+def bm_search_index(options: list[dict]) -> dict[str, str]:
+    """衣装ID -> 絞り込み用の検索文字列（小文字化済み）。"""
+    return {
+        str(o["value"]): f"{o['label']} {o.get('search', '')}".lower() for o in options
+    }
+
+
+def create_bond_ranks_layout() -> html.Div:
+    """絆ランク管理ページ。
+
+    全衣装の現在の絆ランク・次の絆までの残りEXP をブラウザ
+    (localStorage) に保存し、各計算ページの初期値として使う。
+    行の描画は保存データを読む復元コールバックで行う。
+    """
+    panel_style = {
+        "padding": "12px",
+        "border": "1px solid #ccc",
+        "borderRadius": "8px",
+        "marginBottom": "16px",
+    }
+    return html.Div(
+        [
+            html.P(
+                "全生徒（衣装）の現在の絆ランクを管理します。絆ランクを入力した衣装は、"
+                "絆上げ優先度計算機・贈り物配分シミュレータ・必要絆経験値で"
+                "衣装を読み込んだときに、現在の絆ランクと残りEXPが自動で入力されます"
+                "（空欄の衣装は未設定として扱います）。各ページの"
+                "「絆ランク管理に保存」ボタンで、そのページの入力値を保存することもできます。"
+                "保存先はこのブラウザのみです（サーバーには保存されません）。",
+                style={"fontSize": "0.85rem", "color": "#666", "margin": "0 0 16px"},
+            ),
+            html.Div(
+                [
+                    html.Strong("スクリーンショットから読み取り"),
+                    html.P(
+                        "ゲームの「生徒リスト」画面のスクリーンショットから、各生徒の"
+                        "絆ランクを読み取ります。並び順は自由です。スクロールしながら"
+                        "撮った複数枚の画像をまとめて選べます（画面の端で切れている"
+                        "カードは読み取りません）。画像はこのブラウザ内で処理し、"
+                        "サーバーには送信しません。50を超える絆ランクは50として"
+                        "保存します。",
+                        style={
+                            "fontSize": "0.8rem",
+                            "color": "#666",
+                            "margin": "4px 0 8px",
+                        },
+                    ),
+                    dcc.Upload(
+                        id="bm-ocr-upload",
+                        multiple=True,
+                        accept="image/*",
+                        children=html.Div(
+                            [
+                                "画像をドラッグ＆ドロップ、または ",
+                                html.A("ファイルを選択"),
+                            ]
+                        ),
+                        style={
+                            "border": "2px dashed #aac",
+                            "borderRadius": "6px",
+                            "padding": "16px",
+                            "textAlign": "center",
+                            "cursor": "pointer",
+                            "fontSize": "0.9rem",
+                            "color": "#557",
+                        },
+                    ),
+                    html.Div(
+                        id="bm-ocr-status",
+                        style={"marginTop": "8px", "fontSize": "0.85rem"},
+                    ),
+                    html.Div(id="bm-ocr-preview"),
+                    dcc.Store(id="bm-ocr-refs"),
+                    dcc.Store(id="bm-ocr-result"),
+                ],
+                style=panel_style,
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            dcc.Input(
+                                id="bm-search",
+                                type="text",
+                                value="",
+                                placeholder="生徒名・衣装名で絞り込み...",
+                                style={
+                                    "flex": "1 1 220px",
+                                    "maxWidth": "320px",
+                                    "padding": "6px 8px",
+                                },
+                            ),
+                            dcc.Checklist(
+                                id="bm-only-set",
+                                options=[{"label": " 設定済みのみ", "value": "on"}],
+                                value=[],
+                                style={"fontSize": "0.85rem"},
+                            ),
+                            html.Span(
+                                id="bm-count",
+                                style={"color": "#888", "fontSize": "0.8rem"},
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "alignItems": "center",
+                            "gap": "12px",
+                            "flexWrap": "wrap",
+                            "marginBottom": "8px",
+                        },
+                    ),
+                    html.Div(
+                        id="bm-container",
+                        children=html.P(
+                            "読み込み中...",
+                            style={"color": "#888", "margin": "8px 0"},
+                        ),
+                    ),
+                ],
+                style=panel_style,
+            ),
+            dcc.Store(
+                id="bm-search-index", data=bm_search_index(get_costume_options())
+            ),
+            dcc.Interval(id="bm-init", max_intervals=1, interval=200),
+            _footer(),
+        ],
+        className="page-container",
+        style={
+            "maxWidth": "1200px",
+            "margin": "0 auto",
+            "padding": "20px",
+            "fontFamily": "sans-serif",
+        },
+    )
+
+
+# ======================================================================
 # ルートレイアウト（URL ルーティング）
 # ======================================================================
 
@@ -1613,6 +1720,7 @@ PAGES = {
     "/required-exp": ("必要絆経験値", create_required_exp_layout),
     "/gift-lookup": ("贈り物逆引き", create_gift_lookup_layout),
     "/node-compare": ("2次ノード比較", create_node_compare_layout),
+    "/bond-ranks": ("絆ランク管理", create_bond_ranks_layout),
 }
 
 # 主要ページ以外のページ（フッター等からのみアクセス）。
@@ -1666,5 +1774,7 @@ def create_root_layout() -> html.Div:
                 },
             ),
             html.Div(id="page-content"),
+            # 絆ランク管理の保存データ。全ページから参照するためルートに置く。
+            dcc.Store(id="bond-ranks", storage_type="local"),
         ]
     )
