@@ -94,17 +94,19 @@ def apply_page_edits(data, rank_by_costume: dict) -> dict:
 def merge_ocr_cards(cards) -> list[dict]:
     """スクリーンショットの読み取り結果（カードごと）を衣装ごとにまとめる。
 
-    cards は assets/bond_ocr.js の出力 [{"costume_id", "rank", "uncertain"}, ...]
-    （ブラウザからの値なので検証する）。スクロールして撮った画像の重なりで
-    同じ衣装が複数回読まれたときは、確実に読めた値を優先して 1 つにまとめ、
-    読んだ値が食い違えば要確認にする（別の衣装を取り違えた可能性がある）。MAX_RANK を超える絆ランクは
-    MAX_RANK にする。Returns 読み取り順の
-    [{"costume_id", "rank", "read": 読み取った値, "uncertain"}]
+    cards は assets/bond_ocr.js の出力 [{"costume_id", "rank", "uncertain", "name"}, ...]
+    （ブラウザからの値なので検証する。name は名前が衣装と食い違ったときの、最も近い名前）。
+    スクロールして撮った画像の重なりで同じ衣装が複数回読まれたときは、確実に読めた値を
+    優先して 1 つにまとめ、読んだ値が食い違えば要確認にする（別の衣装を取り違えた可能性が
+    ある）。名前が食い違ったカードは別の生徒（候補に無い衣装など）なので、名前の合う
+    カードがある衣装では使わない。MAX_RANK を超える絆ランクは MAX_RANK にする。
+    Returns 読み取り順の [{"costume_id", "rank", "read": 読み取った値, "uncertain",
+    "names": 食い違った名前（名前の合うカードが無い衣装だけ）, "dropped": 使わなかったカード数}]
     （数字が読めなかった衣装は rank / read が None で要確認）。
     """
     if not isinstance(cards, list):
         return []
-    readings: dict[int, list[tuple[int | None, bool]]] = {}
+    readings: dict[int, list[tuple[int | None, bool, str | None]]] = {}
     for c in cards:
         if not isinstance(c, dict):
             continue
@@ -115,17 +117,22 @@ def merge_ocr_cards(cards) -> list[dict]:
         if read is not None and read < MIN_RANK:
             read = None
         uncertain = bool(c.get("uncertain")) or read is None
-        readings.setdefault(cid, []).append((read, uncertain))
+        name = c.get("name")
+        name = name[:40] if isinstance(name, str) and name else None
+        readings.setdefault(cid, []).append((read, uncertain or name is not None, name))
     out = []
-    for cid, rs in readings.items():
-        certain = [r for r, u in rs if not u]
+    for cid, all_rs in readings.items():
+        rs = [r for r in all_rs if r[2] is None] or all_rs
+        certain = [r for r, u, _ in rs if not u]
         read = certain[0] if certain else rs[0][0]
         out.append(
             {
                 "costume_id": cid,
                 "rank": None if read is None else min(read, MAX_RANK),
                 "read": read,
-                "uncertain": not certain or len({r for r, _ in rs}) > 1,
+                "uncertain": not certain or len({r for r, _, _ in rs}) > 1,
+                "names": list(dict.fromkeys(n for _, _, n in rs if n)),
+                "dropped": len(all_rs) - len(rs),
             }
         )
     return out

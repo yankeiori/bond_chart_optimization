@@ -1163,6 +1163,20 @@ input[type="number"] {
     border: 1px solid #ccc;
     border-radius: 4px;
 }
+/* 要確認の衣装の行に並べる、読み取ったカードの切り抜き（bond_ocr.js の crops） */
+.bm-ocr-crops {
+    flex-basis: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.bm-ocr-crops:empty {
+    display: none;
+}
+.bm-ocr-crop {
+    height: 140px;
+    border-radius: 4px;
+}
 
 /* お気に入り（☆）ボタン */
 .fav-btn {

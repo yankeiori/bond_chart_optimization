@@ -1396,6 +1396,9 @@ def _bm_ocr_panel() -> html.Div:
             html.Div(id="bm-ocr-preview"),
             dcc.Store(id="bm-ocr-refs"),
             dcc.Store(id="bm-ocr-result"),
+            # カードの切り抜き画像。ブラウザ内（クライアントサイドのコールバック）
+            # だけで使い、サーバーのコールバックの State にはしないこと。
+            dcc.Store(id="bm-ocr-crops"),
         ],
         title="スクリーンショットから読み取り",
         actions=[

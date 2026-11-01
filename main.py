@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from dash import ALL, ClientsideFunction, Input, Output, State
+from dash import ALL, MATCH, ClientsideFunction, Input, Output, State
 from flask import request
 from app import app as application
 from app.frontend.layout import create_root_layout
@@ -138,6 +138,12 @@ application.clientside_callback(
     Input("bm-ocr-upload", "contents"),
     State("bm-ocr-refs", "data"),
     prevent_initial_call=True,
+)
+application.clientside_callback(
+    ClientsideFunction("bond_ocr", "crops"),
+    Output({"type": "bm-ocr-crops", "costume": MATCH}, "children"),
+    Input({"type": "bm-ocr-crops", "costume": MATCH}, "id"),
+    State("bm-ocr-crops", "data"),
 )
 
 # --- 絆ランク管理: 範囲外の絆ランクを赤枠で示す ---

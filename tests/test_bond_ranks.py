@@ -174,12 +174,40 @@ class TestMergeOcrCards:
             {"costume_id": "4", "rank": "0"},
         ]
         assert merge_ocr_cards(cards) == [
-            {"costume_id": 1, "rank": 31, "read": 31, "uncertain": False},
+            {
+                "costume_id": 1,
+                "rank": 31,
+                "read": 31,
+                "uncertain": False,
+                "names": [],
+                "dropped": 0,
+            },
             # 100 を超える値は 100 にする
-            {"costume_id": 2, "rank": 100, "read": 186, "uncertain": False},
+            {
+                "costume_id": 2,
+                "rank": 100,
+                "read": 186,
+                "uncertain": False,
+                "names": [],
+                "dropped": 0,
+            },
             # 読めなかった数字は要確認
-            {"costume_id": 3, "rank": None, "read": None, "uncertain": True},
-            {"costume_id": 4, "rank": None, "read": None, "uncertain": True},
+            {
+                "costume_id": 3,
+                "rank": None,
+                "read": None,
+                "uncertain": True,
+                "names": [],
+                "dropped": 0,
+            },
+            {
+                "costume_id": 4,
+                "rank": None,
+                "read": None,
+                "uncertain": True,
+                "names": [],
+                "dropped": 0,
+            },
         ]
 
     def test_conflicting_uncertain_reading(self):
@@ -189,7 +217,14 @@ class TestMergeOcrCards:
             {"costume_id": 1, "rank": 1, "uncertain": True},
         ]
         assert merge_ocr_cards(cards) == [
-            {"costume_id": 1, "rank": 30, "read": 30, "uncertain": True}
+            {
+                "costume_id": 1,
+                "rank": 30,
+                "read": 30,
+                "uncertain": True,
+                "names": [],
+                "dropped": 0,
+            }
         ]
 
     def test_conflicting_certain_readings(self):
@@ -198,7 +233,51 @@ class TestMergeOcrCards:
             {"costume_id": 1, "rank": 38, "uncertain": False},
         ]
         assert merge_ocr_cards(cards) == [
-            {"costume_id": 1, "rank": 30, "read": 30, "uncertain": True}
+            {
+                "costume_id": 1,
+                "rank": 30,
+                "read": 30,
+                "uncertain": True,
+                "names": [],
+                "dropped": 0,
+            }
+        ]
+
+    def test_name_mismatch(self):
+        # 食い違った名前は重複なくまとめる。名前の合うカードがある衣装では、
+        # 食い違ったカード（別の生徒）は使わない
+        cards = [
+            {"costume_id": 1, "rank": 12, "uncertain": True, "name": "ツルギ"},
+            {"costume_id": 1, "rank": 12, "uncertain": True, "name": "ツルギ"},
+            {"costume_id": 2, "rank": 5, "uncertain": False, "name": 3},
+            {"costume_id": 3, "rank": 51, "uncertain": False},
+            {"costume_id": 3, "rank": 21, "uncertain": False, "name": "フブキ"},
+        ]
+        assert merge_ocr_cards(cards) == [
+            {
+                "costume_id": 1,
+                "rank": 12,
+                "read": 12,
+                "uncertain": True,
+                "names": ["ツルギ"],
+                "dropped": 0,
+            },
+            {
+                "costume_id": 2,
+                "rank": 5,
+                "read": 5,
+                "uncertain": False,
+                "names": [],
+                "dropped": 0,
+            },
+            {
+                "costume_id": 3,
+                "rank": 51,
+                "read": 51,
+                "uncertain": False,
+                "names": [],
+                "dropped": 1,
+            },
         ]
 
 
@@ -225,6 +304,27 @@ class TestBmOcrPreview:
         assert [i.value for i in inputs] == [20, 40]
         assert [r.children[2].children for r in rows] == ["現在: 未設定", "現在: 35"]
         assert preview[1].id == "bm-ocr-apply-btn"
+        # 要確認の行にだけカードの切り抜きの置き場所がある
+        assert rows[0].children[-1].id == {"type": "bm-ocr-crops", "costume": 2}
+        assert not any(
+            isinstance(c.id, dict) and c.id["type"] == "bm-ocr-crops"
+            for c in rows[1].children
+            if hasattr(c, "id")
+        )
+
+    def test_name_mismatch_not_applied_by_default(self):
+        result = {
+            "cards": [
+                {"costume_id": 1, "rank": 12, "uncertain": True, "name": "ツルギ"}
+            ]
+        }
+        status, preview = _bm_ocr_preview(result, None, self.OPTIONS)
+        assert not any("名前が一致しなかったカード" in c for c in status.children)
+        row = preview[0].children[0]
+        assert row.children[1].children[1].value is None
+        notes = [c for c in row.children if isinstance(c, str)]
+        assert "（読み取り値 12）" in notes
+        assert "（名前が一致しません。近い名前: ツルギ）" in notes
 
     def test_nothing_read(self):
         status, preview = _bm_ocr_preview(

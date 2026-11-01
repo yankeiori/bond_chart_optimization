@@ -3181,10 +3181,11 @@ def bm_render(_n, bond_ranks):
 
     入力値の保存は bm_save_edits が行う。入力のたびに行を再生成すると
     フォーカスを失うため、描画はここだけで行う。あわせて、スクリーンショット
-    読み取りで照合する衣装（生徒画像のある衣装）の [[衣装ID, 表示名], ...] を返す。
+    読み取りで照合する衣装の [[衣装ID, 表示名, 生徒画像があるか], ...] を返す
+    （生徒画像の無い衣装は名前だけで照合する）。
     """
     options = get_costume_options()
-    refs = [[o["value"], o["label"]] for o in options if o["label"] in _STUDENT_ICONS]
+    refs = [[o["value"], o["label"], o["label"] in _STUDENT_ICONS] for o in options]
     return _bm_rows(bond_ranks, options), refs
 
 
@@ -3217,8 +3218,9 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
     """スクリーンショットの読み取り結果（assets/bond_ocr.js）の
     状態メッセージと確認表。Returns (状態メッセージ, 確認表)。
 
-    確認表の絆ランク欄は修正でき、空欄にした衣装は反映しない。
-    要確認の衣装を先に並べる。
+    確認表の絆ランク欄は修正でき、空欄にした衣装は反映しない（名前が衣装と
+    食い違った衣装は最初から空欄）。要確認の衣装を先に並べ、画像と見比べられるようカードの切り抜きの
+    置き場所を付ける（切り抜きはブラウザ内で入れる。assets/bond_ocr.js の crops）。
     """
     if not isinstance(result, dict):
         raise PreventUpdate
@@ -3248,6 +3250,12 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
             [],
         )
     n_uncertain = sum(e["uncertain"] for e in entries)
+    n_dropped = sum(e["dropped"] for e in entries)
+    if n_dropped:
+        notes.append(
+            f"名前が一致しなかったカード {n_dropped} 枚は読み取っていません"
+            "（まだ登録されていない生徒の可能性があります）。"
+        )
     status = html.Span(
         [
             f"{len(entries)} 衣装を読み取りました",
@@ -3265,8 +3273,12 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
             note.append(
                 html.Span("要確認", style={"color": "#c0392b", "fontWeight": "bold"})
             )
-        if e["read"] is not None and e["read"] != e["rank"]:
+        # 名前が衣装と食い違ったカードは別の生徒の可能性があるので、既定では反映しない
+        value = None if e["names"] else e["rank"]
+        if e["read"] is not None and e["read"] != value:
             note.append(f"（読み取り値 {e['read']}）")
+        if e["names"]:
+            note.append(f"（名前が一致しません。近い名前: {'・'.join(e['names'])}）")
         rows.append(
             html.Div(
                 [
@@ -3280,7 +3292,7 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
                             dcc.Input(
                                 id={"type": "bm-ocr-rank", "costume": cid},
                                 type="number",
-                                value=e["rank"],
+                                value=value,
                                 placeholder="反映しない",
                                 style=BM_RANK_STYLE,
                             ),
@@ -3296,6 +3308,16 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
                         },
                     ),
                     *note,
+                    *(
+                        [
+                            html.Div(
+                                id={"type": "bm-ocr-crops", "costume": cid},
+                                className="bm-ocr-crops",
+                            )
+                        ]
+                        if e["uncertain"]
+                        else []
+                    ),
                 ],
                 style={
                     "display": "flex",
