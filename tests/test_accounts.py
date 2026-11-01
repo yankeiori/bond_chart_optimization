@@ -130,3 +130,58 @@ class TestSessionUserId:
     def test_outside_request(self):
         assert accounts.session_user_id() is None
         assert accounts.pop_auth_error() is None
+
+
+class TestLogoutAndDelete:
+    """ログアウト・アカウント削除は POST のみで、本サイトから送られたものだけ受け付ける。"""
+
+    ORIGIN = {"Origin": "http://localhost"}
+
+    @pytest.fixture
+    def client(self, monkeypatch):
+        import app.backend.auth as auth
+
+        deleted = []
+        monkeypatch.setattr(auth, "delete_user", deleted.append)
+        client = app.server.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"] = 7
+        client.deleted = deleted
+        return client
+
+    def _logged_in(self, client):
+        with client.session_transaction() as sess:
+            return "user_id" in sess
+
+    def test_logout_requires_post(self, client):
+        # GET は Dash のページ表示に回り、ログアウトはしない
+        client.get("/auth/logout", headers=self.ORIGIN)
+        assert self._logged_in(client)
+
+    def test_logout_rejects_other_origin(self, client):
+        for headers in (
+            {},
+            {"Origin": "https://evil.example"},
+            {"Origin": "https://localhost.evil.example"},
+            {"Origin": "null"},
+        ):
+            assert client.post("/auth/logout", headers=headers).status_code == 403
+        assert self._logged_in(client)
+
+    def test_logout(self, client):
+        # プロキシの設定でスキームが食い違っても、同じホストなら受け付ける
+        res = client.post("/auth/logout", headers={"Origin": "https://localhost"})
+        assert res.status_code == 302
+        assert not self._logged_in(client)
+
+    def test_delete_rejects_other_origin(self, client):
+        res = client.post("/auth/delete", headers={"Origin": "https://evil.example"})
+        assert res.status_code == 403
+        assert client.deleted == []
+        assert self._logged_in(client)
+
+    def test_delete(self, client):
+        res = client.post("/auth/delete", headers=self.ORIGIN)
+        assert res.status_code == 302
+        assert client.deleted == [7]
+        assert not self._logged_in(client)

@@ -6,9 +6,10 @@
 """
 
 import logging
+from urllib.parse import urlsplit
 
 from authlib.integrations.flask_client import OAuth
-from flask import abort, redirect, session, url_for
+from flask import abort, redirect, request, session, url_for
 
 from app import app
 from app.backend.accounts import (
@@ -86,8 +87,23 @@ def auth_callback(provider):
     return redirect(_RETURN_PATH)
 
 
-@server.route("/auth/logout")
+def _same_origin() -> bool:
+    """リクエストが本サイトのページから送られたか（Origin ヘッダーで確かめる）。
+
+    セッション Cookie は SameSite=Lax なので他サイトからの POST には Cookie が
+    付かないが、念のため送信元も確かめる。ブラウザはフォームの POST に Origin を
+    付ける。プロキシ（Cloudflare・Render）の設定でスキームが http に見えることが
+    あるので、ホスト名（ポート込み）だけを比べる。
+    """
+    origin = request.headers.get("Origin")
+    return origin is not None and urlsplit(origin).netloc == request.host
+
+
+@server.route("/auth/logout", methods=["POST"])
 def auth_logout():
+    """ログアウトする。他サイトのリンクでログアウトさせられないよう POST のみ。"""
+    if not _same_origin():
+        abort(403)
     # セッションを空にすると Cookie ごと削除される
     session.clear()
     return redirect(_RETURN_PATH)
@@ -95,11 +111,9 @@ def auth_logout():
 
 @server.route("/auth/delete", methods=["POST"])
 def auth_delete():
-    """ログイン中のユーザーと保存データを削除してログアウトする。
-
-    セッション Cookie は SameSite=Lax なので、他サイトからの POST では
-    Cookie が送られず削除されない。
-    """
+    """ログイン中のユーザーと保存データを削除してログアウトする。"""
+    if not _same_origin():
+        abort(403)
     user_id = session_user_id()
     if user_id is not None:
         delete_user(user_id)

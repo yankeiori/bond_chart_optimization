@@ -457,8 +457,12 @@ def _header_account() -> html.Div:
                 ),
                 html.Div(
                     [
-                        html.A(
-                            "ログアウト", href="/auth/logout", className="btn btn-sm"
+                        html.Form(
+                            html.Button(
+                                "ログアウト", type="submit", className="btn btn-sm"
+                            ),
+                            action="/auth/logout",
+                            method="POST",
                         ),
                         html.Details(
                             [
