@@ -15,6 +15,7 @@ from app.frontend.layout import (
     _make_bond_rank_input,
     _default_costume_name,
     NAV_GROUPS,
+    EXTRA_PAGES,
     PAGES,
 )
 
@@ -232,6 +233,12 @@ class TestSiteHeader:
         # タブは共通ヘッダーに1つだけ。各ページ側には持たせない。
         _, builder = PAGES[path]
         assert _find_by_class(builder(), "page-tabs") == []
+
+    @pytest.mark.parametrize("path", list({**PAGES, **EXTRA_PAGES}.keys()))
+    def test_pages_do_not_mention_schaledb(self, path):
+        # データの取得元（SchaleDB）はページに出さない
+        _, builder = {**PAGES, **EXTRA_PAGES}[path]
+        assert "schaledb" not in str(builder()).lower()
 
 
 # ---------------------------------------------------------------------------
