@@ -25,3 +25,5 @@ dist/
 # data file
 data/*
 !data/.gitkeep
+# スクリーンショット読み取りの見本（手元での評価用。コミットしない）
+ocr_sample/

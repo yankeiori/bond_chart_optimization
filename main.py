@@ -4,13 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from dash import ALL, ClientsideFunction, Input, Output, State
+from dash import ALL, MATCH, ClientsideFunction, Input, Output, State
 from flask import request
 from app import app as application
 from app.frontend.layout import create_root_layout
 import app.frontend.callbacks  # noqa: F401 - コールバック登録
 import app.backend.api  # noqa: F401 - API エンドポイント登録
 import app.backend.admin  # noqa: F401 - 管理画面登録
+import app.backend.auth  # noqa: F401 - ログイン登録
 
 application.layout = create_root_layout
 
@@ -116,7 +117,8 @@ application.clientside_callback(
             const s = (index && index[id.costume]) || '';
             const r = rankByCostume[id.costume];
             const hit = (!q || s.indexOf(q) >= 0) && (!only || (r !== null && r !== undefined && r !== ''));
-            return hit ? 'bm-row' : 'bm-row bm-hidden';
+            const base = 'costume-row bm-grid bm-row';  // _bm_rows の className
+            return hit ? base : base + ' bm-hidden';
         });
     }
     """,
@@ -137,21 +139,72 @@ application.clientside_callback(
     State("bm-ocr-refs", "data"),
     prevent_initial_call=True,
 )
+application.clientside_callback(
+    ClientsideFunction("bond_ocr", "crops"),
+    Output({"type": "bm-ocr-crops", "costume": MATCH}, "children"),
+    Input({"type": "bm-ocr-crops", "costume": MATCH}, "id"),
+    State("bm-ocr-crops", "data"),
+)
+
+# --- 絆ランク管理: 絆ランクの一覧を画像で保存（assets/bond_image.js） ---
+application.clientside_callback(
+    ClientsideFunction("bond_image", "save"),
+    Output("bm-image-feedback", "children"),
+    Input("bm-save-image-btn", "n_clicks"),
+    State("bond-ranks", "data"),
+    State("bm-ocr-refs", "data"),
+    prevent_initial_call=True,
+)
 
 # --- 絆ランク管理: 範囲外の絆ランクを赤枠で示す ---
 application.clientside_callback(
     """
     function(values) {
-        const base = {width: '80px', textAlign: 'center'};
+        const base = {width: '100%', textAlign: 'center'};  // BM_ROW_RANK_STYLE
         return values.map(function (v) {
             const ok = v === null || v === undefined || v === ''
-                || (Number.isInteger(v) && v >= 1 && v <= 50);
+                || (Number.isInteger(v) && v >= 1 && v <= 100);  // MAX_RANK
             return ok ? base : Object.assign({}, base, {border: '2px solid red', color: 'red'});
         });
     }
     """,
     Output({"type": "bm-rank", "costume": ALL}, "style"),
     Input({"type": "bm-rank", "costume": ALL}, "value"),
+)
+
+# --- 絆ランク管理: 初めてログインしたとき、このブラウザの保存値を取り込む ---
+# （取り込んだ値は bond-ranks の変更としてサーバーに保存される。
+#   dcc.Store は localStorage に id をキーとした JSON で保存している）
+application.clientside_callback(
+    """
+    function(state) {
+        if (!state || !state.needs_import) return window.dash_clientside.no_update;
+        let local = null;
+        try { local = JSON.parse(window.localStorage.getItem('bond-ranks')); } catch (e) {}
+        return (local && Array.isArray(local.costumes)) ? local : {costumes: []};
+    }
+    """,
+    Output("bond-ranks", "data", allow_duplicate=True),
+    Input("account-state", "data"),
+    prevent_initial_call="initial_duplicate",
+)
+
+# --- 絆ランク管理: ログイン中の値をこのブラウザ（localStorage）にも書き写す ---
+# （ログアウト後もログアウト直前の内容を使えるようにする。ページを開いたときの
+#   サーバーの値も書き写すため初回呼び出しも行う）
+application.clientside_callback(
+    """
+    function(data, state) {
+        if (state && state.user_id !== null && state.user_id !== undefined
+                && data !== null && data !== undefined) {
+            try { window.localStorage.setItem('bond-ranks', JSON.stringify(data)); } catch (e) {}
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("bond-ranks-mirror", "data"),
+    Input("bond-ranks", "data"),
+    State("account-state", "data"),
 )
 
 # --- マニュアルモーダル開閉 ---

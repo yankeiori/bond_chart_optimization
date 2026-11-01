@@ -1,28 +1,459 @@
-/* ページ切替タブ（共通ヘッダー内） */
+/* ── 共通デザイン ──
+   色・余白・ボタンはここで定義し、レイアウト側はクラス名だけ付ける。 */
+:root {
+    --c-primary: #4a90d9;
+    --c-primary-dark: #3a7bc0;
+    --c-primary-soft: #eef4fb;
+    --c-border: #d6dbe3;
+    --c-divider: #eceff3;
+    --c-text: #222;
+    --c-muted: #6b7280;
+    --c-success: #1e9e57;
+    --c-danger: #c0392b;
+    --c-soft-bg: #f6f8fc;
+    /* 画面上部に残すヘッダー（タイトル + ログイン）の高さ */
+    --header-h: 56px;
+}
+body {
+    margin: 0;
+    color: var(--c-text);
+    background: #fff;
+    font-family: sans-serif;
+}
+
+/* ── 共通ヘッダー: タイトル + 右上のログイン + カテゴリ付きタブ ──
+   タイトルとログインの行（.site-header-bar）はスクロールしても画面上部に
+   残す。タブ（.site-header-wrap）は通常どおりスクロールで流れる */
+.site-header-bar {
+    position: sticky;
+    top: 0;
+    z-index: 500;
+    background: #fff;
+}
+/* スクロールしたら下端に影を付ける（対応ブラウザのみ） */
+@supports (animation-timeline: scroll()) {
+    .site-header-bar {
+        animation: header-shadow linear both;
+        animation-timeline: scroll();
+        animation-range: 0 40px;
+    }
+}
+@keyframes header-shadow {
+    to {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+}
+.site-header {
+    max-width: 1200px;
+    min-height: var(--header-h);
+    margin: 0 auto;
+    padding: 8px 20px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.site-header-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+.site-title {
+    margin: 0;
+    font-size: 1.5rem;
+}
+/* ログイン / ログイン中の表示（ヘッダー右上） */
+.header-account {
+    margin-left: auto;
+    position: relative;
+    flex-shrink: 0;
+}
+.account-summary {
+    padding: 6px 12px;
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    list-style: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.account-summary::-webkit-details-marker {
+    display: none;
+}
+.account-summary::after {
+    content: " ▾";
+    color: var(--c-muted);
+}
+.account-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 600;
+    width: 240px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.account-delete {
+    font-size: 0.8rem;
+}
+.account-delete > summary {
+    cursor: pointer;
+    color: var(--c-muted);
+}
+
+/* ページ切替タブ: カテゴリ（見出し + タブの組）を横に並べる */
 .page-tabs {
     display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    border-bottom: 2px solid var(--c-primary);
+}
+.tab-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.tab-group-label {
+    padding-left: 4px;
+    font-size: 0.7rem;
+    color: var(--c-muted);
+    white-space: nowrap;
+}
+.tab-group-tabs {
+    display: flex;
     gap: 4px;
-    border-bottom: 2px solid #4a90d9;
 }
 .page-tab {
     padding: 8px 18px;
+    border: 1px solid var(--c-primary);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: var(--c-primary-soft);
+    color: var(--c-primary);
     font-size: 0.9rem;
     font-weight: bold;
     text-decoration: none;
-    border: 1px solid #4a90d9;
-    border-bottom: none;
-    border-radius: 8px 8px 0 0;
-    background: #eef4fb;
-    color: #4a90d9;
     white-space: nowrap;
     transition: background 0.12s, color 0.12s;
 }
 .page-tab-active {
-    background: #4a90d9;
+    background: var(--c-primary);
     color: #fff;
 }
 .page-tab:not(.page-tab-active):hover {
     background: #d4e6f7;
+}
+
+/* 共通フッター */
+.site-footer {
+    margin-top: 32px;
+    padding-top: 12px;
+    border-top: 1px solid #ddd;
+    display: flex;
+    justify-content: center;
+    gap: 6px 20px;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: #888;
+}
+
+/* ページ本体（各ページ共通の幅・余白） */
+.page-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* ページ冒頭の説明（要約1行 + 折りたたみの詳しい説明） */
+.page-intro {
+    margin-bottom: 16px;
+}
+.page-intro-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.page-lead {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #444;
+}
+.page-intro-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.page-details {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: var(--c-muted);
+}
+.page-details > summary {
+    cursor: pointer;
+    color: var(--c-primary);
+    width: max-content;
+}
+.page-details > p {
+    margin: 6px 0 0;
+    line-height: 1.6;
+}
+
+/* パネル（入力・結果のまとまり） */
+.panel {
+    padding: 12px 14px;
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: #fff;
+    margin-bottom: 16px;
+}
+.panel-soft {
+    background: var(--c-soft-bg);
+}
+.panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.panel-title {
+    font-weight: bold;
+    font-size: 1rem;
+}
+.panel-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.panel-body {
+    margin-top: 8px;
+}
+.hint {
+    font-size: 0.8rem;
+    color: var(--c-muted);
+    margin: 4px 0 0;
+    line-height: 1.5;
+}
+.empty-note {
+    color: #888;
+    margin: 8px 0;
+}
+.feedback {
+    font-size: 0.85rem;
+    margin-top: 6px;
+}
+.feedback:empty {
+    display: none;
+}
+.link {
+    color: var(--c-primary);
+    text-decoration: underline;
+}
+
+/* 折りたたみパネル（高度な設定など） */
+details.panel > summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+details.panel[open] > summary {
+    margin-bottom: 10px;
+}
+
+/* ボタン: その欄で次に押すもの（読み込み・追加・計算）は塗りつぶし
+   （btn-primary）、それ以外は枠線。計算は btn-calc で全幅にする */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    box-sizing: border-box;
+    padding: 6px 14px;
+    border: 1px solid var(--c-primary);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--c-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.btn:hover {
+    background: var(--c-primary-soft);
+}
+.btn-sm {
+    padding: 3px 10px;
+    font-size: 0.8rem;
+}
+.btn-primary {
+    background: var(--c-primary);
+    color: #fff;
+}
+.btn-primary:hover {
+    background: var(--c-primary-dark);
+}
+.btn-danger {
+    border-color: var(--c-danger);
+    background: var(--c-danger);
+    color: #fff;
+}
+.btn-danger:hover {
+    background: #a93226;
+}
+.btn-calc {
+    width: 100%;
+    padding: 12px 24px;
+    font-size: 1.05rem;
+    font-weight: bold;
+}
+.btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+    background: #fff;
+}
+.calc-area {
+    margin-bottom: 16px;
+}
+.icon-btn {
+    background: none;
+    border: none;
+    padding: 0 4px;
+    color: #888;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.icon-btn:hover {
+    color: var(--c-danger);
+}
+/* 並び替えボタン（▲▼） */
+.move-btn {
+    padding: 2px 0;
+    width: 28px;
+    border: 1px solid var(--c-border);
+    border-radius: 4px;
+    background: #fff;
+    color: #555;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    cursor: pointer;
+}
+.move-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* プリセット / 衣装の追加: 選択欄とボタンを1行に並べる */
+.picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+.picker-row .picker-dropdown {
+    flex: 1 1 260px;
+    min-width: 0;
+    max-width: 420px;
+}
+.picker-row .picker-radio label {
+    margin-right: 10px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+/* 衣装ごとの入力表（見出し行 + 1衣装1行） */
+.costume-table {
+    margin-top: 8px;
+}
+.costume-head,
+.costume-row {
+    display: grid;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 6px 0;
+}
+.costume-head {
+    padding-top: 0;
+    border-bottom: 1px solid var(--c-border);
+    font-size: 0.75rem;
+    color: var(--c-muted);
+}
+.costume-row {
+    border-bottom: 1px solid var(--c-divider);
+}
+.costume-row .dash-input-container,
+.costume-row input {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+}
+/* 列が固定幅の表は、見出し・区切り線を列の合計幅までにする（PC 幅のみ。
+   スマホ幅では衣装名の列が残りの幅を使うので画面いっぱいのまま） */
+@media (min-width: 769px) {
+    .costume-table-fit {
+        width: fit-content;
+        max-width: 100%;
+    }
+}
+/* 行が無い（未読み込み・未追加）ときは見出しを出さない */
+.costume-table:not(:has(.costume-row)) .costume-head {
+    display: none;
+}
+.costume-pos {
+    font-weight: bold;
+    color: #999;
+    text-align: right;
+}
+.costume-name {
+    min-width: 0;
+}
+.span-2 {
+    grid-column: span 2;
+}
+/* 贈り物配分シミュレータ: 優先 / 衣装 / 絆ランク / 残りEXP / 絆ボーナス×7 */
+.gs-grid {
+    grid-template-columns: 20px 28px 28px minmax(120px, 1.2fr) 64px 76px minmax(0, 3fr);
+}
+.bonus-cells {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #555;
+}
+.bonus-label {
+    display: none;
+}
+/* 必要絆経験値: 優先 / 衣装 / 絆ランク / 残りEXP / 目標 / 削除。
+   衣装名の列は広げすぎず（入力欄が名前から離れないように）左に詰める。
+   行ごとに別のグリッドなので、列幅は全行で同じになる固定の上限にする */
+.rb-grid {
+    grid-template-columns: 20px 28px 28px minmax(140px, 260px) 64px 76px 64px 28px;
+    justify-content: start;
+}
+/* 絆上げ優先度計算機: 衣装 / 絆ランク / 絆ボーナス×7 */
+.co-grid {
+    grid-template-columns: minmax(120px, 1.2fr) 80px minmax(0, 3fr);
+}
+/* 絆ランク管理: 衣装 / 絆ランク */
+.bm-grid {
+    grid-template-columns: minmax(0, 1fr) 76px;
 }
 
 /* number input のスピナーボタンを非表示 */
@@ -36,7 +467,13 @@ input[type="number"] {
     appearance: textbox;
 }
 
-/* Dash dcc.Input の増減ボタンを非表示 */
+/* Dash 4 の dcc.Input の増減ボタン（−/+）を非表示。
+   dcc.Input の style・幅は外側の .dash-input-container に当たる */
+.dash-input-stepper {
+    display: none !important;
+}
+
+/* Dash dcc.Input の増減ボタンを非表示（旧バージョン） */
 .dash-input-group .input-group-addon {
     display: none !important;
 }
@@ -96,11 +533,105 @@ input[type="number"] {
     font-size: 1rem !important;
 }
 
-/* ── PC: 絆入力を7列1行に固定 ── */
+/* ── 絆上げ優先度計算機: 衣装カード ── */
+.student-card {
+    padding: 10px 0 12px;
+    border-bottom: 1px solid var(--c-divider);
+}
+.student-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.student-card-header strong {
+    white-space: nowrap;
+}
+.student-card-header .dash-input-container {
+    flex: 1;
+}
+.student-card-header input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 0.85rem;
+}
 .bond-fields {
-    display: grid !important;
-    grid-template-columns: repeat(7, auto) !important;
-    gap: 8px !important;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+}
+.bond-field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+.bond-field .dash-input-container {
+    width: 72px;
+    max-width: 100%;
+}
+.bond-field input {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+}
+.add-row-btn {
+    width: 100%;
+    margin-top: 10px;
+    border-style: dashed;
+}
+/* 絆ボーナスの手動編集（衣装カード）の折りたたみ */
+.manual-edit {
+    margin-top: 10px;
+    font-size: 0.85rem;
+}
+.manual-edit > summary {
+    cursor: pointer;
+    color: var(--c-primary);
+    width: max-content;
+    max-width: 100%;
+}
+.manual-edit[open] > summary {
+    margin-bottom: 4px;
+}
+.rank-stepper {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+}
+.rank-stepper .dash-input-container {
+    width: 50px;
+}
+.rank-stepper input {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+}
+.rank-stepper-btns {
+    display: flex;
+    flex-direction: column;
+}
+.rank-stepper-btns button {
+    width: 24px;
+    height: 14px;
+    padding: 0;
+    border: 1px solid #ccc;
+    background: #f5f5f5;
+    font-size: 0.65rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.rank-stepper-btns button:first-child {
+    border-radius: 3px 3px 0 0;
+}
+.rank-stepper-btns button:last-child {
+    border-radius: 0 0 3px 3px;
+}
+.priority-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 /* ── 贈り物逆引きページ ── */
@@ -118,9 +649,9 @@ input[type="number"] {
     width: 380px;
     flex-shrink: 0;
     position: sticky;
-    top: 16px;
+    top: calc(var(--header-h) + 12px);
     align-self: flex-start;
-    max-height: calc(100vh - 32px);
+    max-height: calc(100vh - var(--header-h) - 24px);
     overflow-y: auto;
 }
 .gl-gift-grid {
@@ -358,75 +889,85 @@ input[type="number"] {
     .nc-gift-row {
         flex-wrap: wrap;
     }
-    /* 2カラム → 縦積み */
-    .main-columns {
-        flex-direction: column !important;
-        gap: 12px !important;
-    }
-
-    /* サイドバーを横幅いっぱいに */
-    .sidebar {
-        width: 100% !important;
-        position: static !important;
-    }
-
-    /* メインコンテンツを横幅いっぱいに */
-    .main-columns > div:last-child {
-        width: 100% !important;
-    }
-
     /* ページ全体のパディングを縮小 */
     .page-container {
-        padding: 10px !important;
+        padding: 10px;
     }
 
     /* 共通ヘッダー */
-    .site-header-wrap {
-        padding: 10px 10px 0 !important;
+    :root {
+        --header-h: 52px;
     }
     .site-header {
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        gap: 4px !important;
+        padding: 6px 10px;
     }
-    .site-header > div {
-        margin-left: 0 !important;
+    .site-header-wrap {
+        padding: 0 10px;
     }
     .site-title {
-        font-size: 1.2rem !important;
+        font-size: 1.15rem;
     }
 
     /* タブバー: はみ出す場合は横スクロール */
     .page-tabs {
-        overflow-x: auto !important;
+        gap: 10px;
+        overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
     .page-tab {
-        padding: 8px 10px !important;
-        font-size: 0.8rem !important;
+        padding: 8px 10px;
+        font-size: 0.8rem;
     }
 
-    /* ヘッダー行: 縦積み中央揃え */
-    .page-header {
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        gap: 6px !important;
+    /* ページ冒頭の説明: ボタンは要約の下に */
+    .page-intro-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
     }
-    .page-header h1 {
-        font-size: 1.25rem !important;
+    .page-intro-actions {
+        margin-left: 0;
     }
-    .page-header-right {
-        width: 100% !important;
-        justify-content: space-between !important;
-        margin-left: 0 !important;
+    .panel {
+        padding: 10px;
+    }
+
+    /* 衣装ごとの入力表: 列を詰め、絆ボーナスは次の行に回す */
+    /* 順位の番号は ▲▼ の並びで分かるので省き、衣装名の幅を確保する */
+    .costume-pos {
+        display: none;
+    }
+    .gs-grid {
+        grid-template-columns: 28px 28px minmax(0, 1fr) 48px 60px;
+    }
+    .costume-head .bonus-cells {
+        display: none;
+    }
+    .costume-row .bonus-cells {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        text-align: left;
+        font-size: 0.75rem;
+    }
+    .bonus-label {
+        display: inline;
+        color: #999;
+        margin-right: 4px;
+    }
+    .rb-grid {
+        grid-template-columns: 28px 28px minmax(0, 1fr) 40px 52px 40px 22px;
+        gap: 4px;
+    }
+    .bm-grid {
+        grid-template-columns: minmax(0, 1fr) 64px;
+    }
+    .co-grid {
+        grid-template-columns: minmax(0, 1fr) 80px;
     }
 
     /* 衣装カード */
-    .student-card {
-        padding: 10px !important;
-    }
     .student-card-header input[type="text"] {
-        font-size: 0.9rem !important;
+        font-size: 0.9rem;
     }
 
     /* 衣装カード内の絆入力: 4列固定 → 4+3 の2行 */
@@ -443,28 +984,17 @@ input[type="number"] {
         padding: 6px 4px !important;
     }
 
-    /* 絆ランク入力行 */
-    .bond-rank-row {
-        display: grid !important;
-        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)) !important;
-        gap: 8px !important;
-    }
-    .bond-rank-section {
-        padding: 10px !important;
-    }
 
     /* 全ボタン: タッチしやすい最小高さ */
-    button,
+    .btn:not(.btn-sm),
     .dash-dropdown .Select-control {
-        min-height: 44px !important;
+        min-height: 44px;
+    }
+    .btn-sm,
+    .move-btn {
+        min-height: 32px;
     }
 
-    /* 衣装追加ボタン */
-    .add-student-btn {
-        width: 100% !important;
-        padding: 10px 16px !important;
-        font-size: 1rem !important;
-    }
 
     /* 計算ボタン: 画面下部に固定 */
     .calc-btn-wrapper {
@@ -500,12 +1030,10 @@ input[type="number"] {
         white-space: nowrap;
     }
 
-    /* プリセットセクション: ドロップダウンを1行、ボタンを次の行 */
-    .preset-section .dash-dropdown {
-        width: 100% !important;
-    }
-    #load-preset-btn {
-        padding: 8px 16px !important;
+    /* プリセット / 衣装の追加: 選択欄を1行、ボタンは次の行 */
+    .picker-row .picker-dropdown {
+        flex-basis: 100%;
+        max-width: none;
     }
 
     /* モーダル */
@@ -537,19 +1065,13 @@ input[type="number"] {
 
     /* 削除ボタン: タップしやすく */
     .remove-student-btn {
-        width: 32px !important;
-        height: 32px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        width: 32px;
+        height: 32px;
     }
 }
 
 /* ── 小さいスマホ対応 (360px以下) ── */
 @media (max-width: 360px) {
-    .page-header h1 {
-        font-size: 1.1rem !important;
-    }
     .bond-fields {
         grid-template-columns: repeat(4, 1fr) !important;
     }
@@ -558,4 +1080,106 @@ input[type="number"] {
 /* 絆ランク管理: 絞り込みで非表示にした行（インラインの display:flex より優先） */
 .bm-hidden {
     display: none !important;
+}
+
+/* 絆ランク管理: サーバーへの保存失敗の通知（画面下に固定。空なら出さない） */
+.account-sync-error {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100% - 32px);
+    box-sizing: border-box;
+    padding: 8px 14px;
+    background: #fff5f5;
+    border: 1px solid #e0a0a0;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    color: #c00;
+    font-size: 0.85rem;
+    z-index: 1000;
+}
+.account-sync-error:empty {
+    display: none;
+}
+
+/* 絆ランク管理: ログイン失敗などの通知 */
+.auth-error {
+    margin: 0 0 16px;
+    padding: 8px 12px;
+    border: 1px solid #e0a0a0;
+    border-radius: 6px;
+    background: #fff5f5;
+    color: #c00;
+    font-size: 0.85rem;
+}
+
+/* 絆ランク管理: 一覧は幅に応じて複数列に分け、左から右へ並べる（グリッド）。
+   列ごとの見出しも同じ列数・幅のグリッド（auto-fill）に並べ、2行目に回った
+   余りの見出しは高さ 0 の行に入れて隠す */
+.bm-rows,
+.bm-heads {
+    --bm-col-w: 250px;
+    --bm-col-gap: 32px;
+}
+.bm-rows {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--bm-col-w), 1fr));
+    column-gap: var(--bm-col-gap);
+}
+/* 案内文（読み込み中など）は1列目から全幅で出す */
+.bm-rows > .empty-note {
+    grid-column: 1 / -1;
+}
+/* 読み取り結果の確認表（1行が長いので列を広く） */
+.bm-rows.bm-ocr-rows {
+    --bm-col-w: 400px;
+}
+.bm-heads {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--bm-col-w), 1fr));
+    grid-template-rows: auto;
+    grid-auto-rows: 0;
+    column-gap: var(--bm-col-gap);
+    overflow: hidden;
+}
+/* 読み取り: 画像の選択ボタンは見出しの右。撮り方・サンプル画像は折りたたみ */
+.bm-ocr-upload {
+    display: inline-block;
+}
+.bm-ocr-help {
+    font-size: 0.8rem;
+}
+.bm-ocr-help > summary {
+    cursor: pointer;
+    color: var(--c-primary);
+    width: max-content;
+}
+.bm-ocr-example {
+    display: block;
+    max-width: min(100%, 480px);
+    margin-top: 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+/* 要確認の衣装の行に並べる、読み取ったカードの切り抜き（bond_ocr.js の crops） */
+.bm-ocr-crops {
+    flex-basis: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.bm-ocr-crops:empty {
+    display: none;
+}
+.bm-ocr-crop {
+    height: 140px;
+    border-radius: 4px;
+}
+
+/* お気に入り（☆）ボタン */
+.fav-btn {
+    font-size: 1.1rem;
+    padding: 2px 10px;
 }

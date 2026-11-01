@@ -388,8 +388,9 @@ function _solver_calcChartSync(
     });
 
     var rankMap = {};
+    // 絆ボーナスは 50 までなので、51 以上は 50 として扱う
     rankIds.forEach(function (id, i) {
-        rankMap[id.index] = rankValues[i];
+        rankMap[id.index] = Math.min(50, rankValues[i]);
     });
     var currentRanks = idxOrder.map(function (idx) {
         return rankMap[idx];
@@ -749,15 +750,6 @@ function _solver_calcChartSync(
     };
 
     // --- 結果コンポーネント ---
-    var btnStyle = {
-        padding: "6px 16px",
-        border: "none",
-        borderRadius: "4px",
-        cursor: "pointer",
-        fontSize: "0.85rem",
-        color: "white",
-    };
-
     return _solver_h("Div", {
         children: [
             _solver_h("Div", {
@@ -772,17 +764,13 @@ function _solver_calcChartSync(
                                 children: "\u753b\u50cf\u4fdd\u5b58",
                                 id: "save-image-btn",
                                 n_clicks: 0,
-                                style: Object.assign({}, btnStyle, {
-                                    background: "#e67e22",
-                                }),
+                                className: "btn btn-sm",
                             }),
                             _solver_h("Button", {
                                 children: "CSV\u4fdd\u5b58",
                                 id: "save-csv-btn",
                                 n_clicks: 0,
-                                style: Object.assign({}, btnStyle, {
-                                    background: "#8e44ad",
-                                }),
+                                className: "btn btn-sm",
                             }),
                         ],
                         style: {
@@ -834,17 +822,13 @@ function _solver_calcChartSync(
                                 children: "\u753b\u50cf\u4fdd\u5b58",
                                 id: "save-detail-image-btn",
                                 n_clicks: 0,
-                                style: Object.assign({}, btnStyle, {
-                                    background: "#e67e22",
-                                }),
+                                className: "btn btn-sm",
                             }),
                             _solver_h("Button", {
                                 children: "CSV\u4fdd\u5b58",
                                 id: "save-detail-csv-btn",
                                 n_clicks: 0,
-                                style: Object.assign({}, btnStyle, {
-                                    background: "#8e44ad",
-                                }),
+                                className: "btn btn-sm",
                             }),
                         ],
                         style: {
@@ -885,7 +869,7 @@ window.dash_clientside.solver = {
         return rankIds.map(function (rid, i) {
             if (rid.index !== targetIndex) return window.dash_clientside.no_update;
             var cur = typeof values[i] === "number" ? values[i] : 20;
-            return isInc ? Math.min(50, cur + 1) : Math.max(1, cur - 1);
+            return isInc ? Math.min(100, cur + 1) : Math.max(1, cur - 1);
         });
     },
 
@@ -914,7 +898,7 @@ window.dash_clientside.solver = {
         for (var ri = 0; ri < rankValues.length; ri++) {
             var rv = rankValues[ri];
             if (rv === null || rv === undefined || typeof rv !== "number" ||
-                !isFinite(rv) || rv < 1 || rv > 50 || rv !== Math.floor(rv)) {
+                !isFinite(rv) || rv < 1 || rv > 100 || rv !== Math.floor(rv)) {
                 var cidx = rankIds[ri] ? rankIds[ri].index : ri;
                 var cname = null;
                 for (var ci = 0; ci < costumeIds.length; ci++) {
@@ -929,19 +913,19 @@ window.dash_clientside.solver = {
         if (invalidNames.length > 0) {
             return [
                 _solver_h("P", {
-                    children: "絆ランクは1〜50の整数で入力してください（" + invalidNames.join("、") + "）。",
+                    children: "絆ランクは1〜100の整数で入力してください（" + invalidNames.join("、") + "）。",
                     style: { color: "red", fontWeight: "bold" },
                 }),
                 window.dash_clientside.no_update,
             ];
         }
 
-        // 全衣装の絆ランクが50の場合はエラー表示（Store は更新しない）
+        // 全衣装の絆ランクが50以上の場合はエラー表示（Store は更新しない）
         var allMax = rankValues.every(function (r) { return r >= 50; });
         if (allMax) {
             return [
                 _solver_h("P", {
-                    children: "全ての衣装の絆ランクが50のため、計算できません。",
+                    children: "全ての衣装の絆ランクが50以上のため、計算できません。",
                     style: { color: "red", fontWeight: "bold" },
                 }),
                 window.dash_clientside.no_update,
