@@ -3208,7 +3208,8 @@ def bm_save_edits(rank_values, rank_ids, bond_ranks):
         bond_ranks,
         {rid["costume"]: v for v, rid in zip(rank_values, rank_ids)},
     )
-    count = f"設定済み {len(saved['costumes'])} / {len(rank_ids)} 衣装"
+    total = sum(e["rank"] for e in saved["costumes"])
+    count = f"設定済み {len(saved['costumes'])} / {len(rank_ids)} 衣装・合計絆ランク {total}"
     if saved["costumes"] == normalize_bond_ranks(bond_ranks):
         return no_update, count
     return saved, count
