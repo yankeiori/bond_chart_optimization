@@ -46,6 +46,13 @@ from app.backend.gift_solver import (
     solve_required_boxes,
     exp_to_reach_rank,
 )
+from app.backend.bond_ranks import (
+    apply_page_edits,
+    normalize_bond_ranks,
+    ranks_for_costumes,
+    save_bond_ranks,
+    valid_rank,
+)
 from app.frontend.layout import (
     make_student_card,
     _make_bond_rank_input,
@@ -441,11 +448,18 @@ def _preset_present_children(preset_value, costumes: list[dict]):
 
 
 def _gs_build_view(
-    preset_value, ranks=None, qty=None, use=None, remain=None, order=None
+    preset_value,
+    ranks=None,
+    qty=None,
+    use=None,
+    remain=None,
+    order=None,
+    bond_ranks=None,
 ):
     """プリセットから 衣装表示 / 好物表 / フィードバック / loaded-store /
     贈り物リスト / 優先順位 を構築する。ranks/qty/use/remain/order は
-    保存値の上書き（復元用）。
+    保存値の上書き（復元用）。bond_ranks を渡すと、絆ランク管理で
+    設定済みの衣装の 絆ランク / 残りEXP を初期値に使う（新規読み込み用）。
 
     Returns (costume_children, present_children, feedback, store_data,
     gift_list_children, order) または失敗時
@@ -464,6 +478,10 @@ def _gs_build_view(
         )
     display_name, costumes = result
     student_name, status_name = parsed
+    if bond_ranks is not None:
+        ranks, remain = ranks_for_costumes(
+            bond_ranks, [c.get("costume_id") for c in costumes]
+        )
     present = get_preset_present(student_name, status_name)
     preferred = {gid for tiers in present.values() for gid in tiers}
 
@@ -507,9 +525,10 @@ def _gs_build_view(
     Input("gs-load-preset-btn", "n_clicks"),
     State("gs-preset-dropdown", "value"),
     State("gs-status-radio", "value"),
+    State("bond-ranks", "data"),
     prevent_initial_call=True,
 )
-def gs_load_preset(n_clicks, dropdown_value, status_value):
+def gs_load_preset(n_clicks, dropdown_value, status_value, bond_ranks):
     preset_value = _combined_preset_value(dropdown_value, status_value)
     if not preset_value:
         return (
@@ -527,10 +546,158 @@ def gs_load_preset(n_clicks, dropdown_value, status_value):
         store,
         gift_list,
         order,
-    ) = _gs_build_view(preset_value)
+    ) = _gs_build_view(preset_value, bond_ranks=bond_ranks or {})
     if store is None:
         return (no_update, no_update, feedback, no_update, no_update, no_update)
     return (costume_children, present_children, feedback, store, gift_list, order)
+
+
+def _overlay_bond_ranks(bond_ranks, costume_ids, rank_by_index, remain_by_index):
+    """入力欄の値 ({index: 値}) を、絆ランク管理で設定済みの衣装だけ
+    保存値で上書きする。
+
+    保存値で残りEXPが未入力の衣装は空欄にする（古い入力値を残さない）。
+    Returns (ranks, remains, 反映した衣装数)。
+    """
+    saved_ranks, saved_remains = ranks_for_costumes(bond_ranks, costume_ids)
+    ranks = {**rank_by_index, **saved_ranks}
+    remains = {i: v for i, v in remain_by_index.items() if i not in saved_ranks}
+    remains.update(saved_remains)
+    return ranks, remains, len(saved_ranks)
+
+
+def _save_inputs_to_bond_ranks(
+    bond_ranks, costume_ids, rank_by_index, remain_by_index=None
+):
+    """入力欄の値 ({index: 値}) を costume_id 単位で絆ランク管理へ保存する。
+
+    costume_id の無い衣装（手入力など）と、絆ランクが無効な衣装は保存しない。
+    remain_by_index が None なら残りEXPの入力欄が無いページとして扱う
+    （save_bond_ranks 参照）。Returns (新しい保存データ, 保存した衣装数)。
+    """
+    rank_by_cid = {}
+    remain_by_cid = {}
+    for i, cid in enumerate(costume_ids):
+        if cid is None or valid_rank(rank_by_index.get(i)) is None:
+            continue
+        rank_by_cid[cid] = rank_by_index[i]
+        if remain_by_index is not None:
+            remain_by_cid[cid] = remain_by_index.get(i)
+    saved = save_bond_ranks(
+        bond_ranks, rank_by_cid, None if remain_by_index is None else remain_by_cid
+    )
+    return saved, len(rank_by_cid)
+
+
+_BOND_RANKS_LINK = dcc.Link(
+    "絆ランク管理", href="/bond-ranks", style={"color": "#4a90d9"}
+)
+
+
+def _bond_ranks_applied_feedback(n: int):
+    """「絆ランク管理から反映」の結果メッセージ。"""
+    if n == 0:
+        return html.Span(
+            [
+                "絆ランクを設定済みの衣装がありません（",
+                _BOND_RANKS_LINK,
+                "で設定できます）。",
+            ],
+            style={"color": "#888"},
+        )
+    return html.Span(
+        f"保存済みの絆ランクを {n} 衣装に反映しました。", style={"color": "#27ae60"}
+    )
+
+
+def _bond_ranks_saved_feedback(n: int):
+    """「絆ランク管理に保存」の結果メッセージ。"""
+    if n == 0:
+        return html.Span(
+            "保存できる衣装がありません（絆ランクが空欄・範囲外の衣装は保存しません）。",
+            style={"color": "red"},
+        )
+    return html.Span(
+        [f"{n} 衣装の絆ランクを", _BOND_RANKS_LINK, "に保存しました。"],
+        style={"color": "#27ae60"},
+    )
+
+
+@callback(
+    Output("gs-costume-display", "children", allow_duplicate=True),
+    Output("gs-bond-ranks-feedback", "children"),
+    Input("gs-apply-bond-ranks-btn", "n_clicks"),
+    State("bond-ranks", "data"),
+    State("gs-loaded-preset", "data"),
+    State("gs-costume-order", "data"),
+    State({"type": "gs-bond-rank", "index": ALL}, "value"),
+    State({"type": "gs-bond-rank", "index": ALL}, "id"),
+    State({"type": "gs-bond-remain", "index": ALL}, "value"),
+    State({"type": "gs-bond-remain", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def gs_apply_bond_ranks(
+    n_clicks,
+    bond_ranks,
+    loaded,
+    order,
+    rank_values,
+    rank_ids,
+    remain_values,
+    remain_ids,
+):
+    """絆ランク管理で設定済みの衣装の 絆ランク / 残りEXP で入力欄を上書きする。"""
+    if not n_clicks:
+        raise PreventUpdate
+    costumes = (loaded or {}).get("costumes") or []
+    if not costumes:
+        return no_update, html.Span(
+            "プリセットを読み込んでください。", style={"color": "red"}
+        )
+    ranks, remains, n = _overlay_bond_ranks(
+        bond_ranks,
+        [c.get("costume_id") for c in costumes],
+        _values_by_index(rank_values, rank_ids),
+        _values_by_index(remain_values, remain_ids),
+    )
+    return (
+        _gs_costume_rows(
+            costumes, rank_by_index=ranks, remain_by_index=remains, order=order
+        ),
+        _bond_ranks_applied_feedback(n),
+    )
+
+
+@callback(
+    Output("bond-ranks", "data", allow_duplicate=True),
+    Output("gs-bond-ranks-feedback", "children", allow_duplicate=True),
+    Input("gs-save-bond-ranks-btn", "n_clicks"),
+    State("bond-ranks", "data"),
+    State("gs-loaded-preset", "data"),
+    State({"type": "gs-bond-rank", "index": ALL}, "value"),
+    State({"type": "gs-bond-rank", "index": ALL}, "id"),
+    State({"type": "gs-bond-remain", "index": ALL}, "value"),
+    State({"type": "gs-bond-remain", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def gs_save_bond_ranks(
+    n_clicks, bond_ranks, loaded, rank_values, rank_ids, remain_values, remain_ids
+):
+    """入力中の 絆ランク / 残りEXP を絆ランク管理に保存する。"""
+    if not n_clicks:
+        raise PreventUpdate
+    costumes = (loaded or {}).get("costumes") or []
+    if not costumes:
+        return no_update, html.Span(
+            "プリセットを読み込んでください。", style={"color": "red"}
+        )
+    saved, n = _save_inputs_to_bond_ranks(
+        bond_ranks,
+        [c.get("costume_id") for c in costumes],
+        _values_by_index(rank_values, rank_ids),
+        _values_by_index(remain_values, remain_ids),
+    )
+    return (saved if n else no_update), _bond_ranks_saved_feedback(n)
 
 
 # ----------------------------------------------------------------------
@@ -1353,6 +1520,7 @@ def _rb_shift_indices(by_index: dict[int, object], removed: int) -> dict[int, ob
     State({"type": "rb-gift-qty", "gift": ALL}, "id"),
     State({"type": "rb-gift-use", "gift": ALL}, "value"),
     State({"type": "rb-gift-use", "gift": ALL}, "id"),
+    State("bond-ranks", "data"),
     prevent_initial_call=True,
 )
 def rb_update_costumes(
@@ -1372,8 +1540,10 @@ def rb_update_costumes(
     qty_ids,
     use_values,
     use_ids,
+    bond_ranks,
 ):
     """生徒（衣装）の追加・削除・並び替え（▲▼）。既存行の入力値は引き継ぐ。
+    追加した衣装の絆ランクが絆ランク管理で設定済みなら、その値を初期値にする。
 
     並び順がそのまま優先順位（上が最優先）。贈り物リストは新しい
     衣装構成の好物に合わせて使用フラグの既定値を更新して再構築する
@@ -1423,6 +1593,12 @@ def rb_update_costumes(
             )
         old_entries = list(entries)
         entries.append({"costume_id": dropdown_value, "label": label})
+        ranks, remains, _ = _overlay_bond_ranks(
+            bond_ranks,
+            [None] * (len(entries) - 1) + [dropdown_value],
+            ranks,
+            remains,
+        )
         return (
             _rb_costume_rows(entries, ranks, remains, targets),
             entries,
@@ -1478,6 +1654,86 @@ def rb_update_costumes(
         )
 
     raise PreventUpdate
+
+
+@callback(
+    Output("rb-costume-container", "children", allow_duplicate=True),
+    Output("rb-bond-ranks-feedback", "children"),
+    Input("rb-apply-bond-ranks-btn", "n_clicks"),
+    State("bond-ranks", "data"),
+    State("rb-costumes", "data"),
+    State({"type": "rb-bond-rank", "index": ALL}, "value"),
+    State({"type": "rb-bond-rank", "index": ALL}, "id"),
+    State({"type": "rb-bond-remain", "index": ALL}, "value"),
+    State({"type": "rb-bond-remain", "index": ALL}, "id"),
+    State({"type": "rb-bond-target", "index": ALL}, "value"),
+    State({"type": "rb-bond-target", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def rb_apply_bond_ranks(
+    n_clicks,
+    bond_ranks,
+    entries,
+    rank_values,
+    rank_ids,
+    remain_values,
+    remain_ids,
+    target_values,
+    target_ids,
+):
+    """絆ランク管理で設定済みの衣装の 絆ランク / 残りEXP で入力欄を
+    上書きする（目標は保持）。"""
+    if not n_clicks:
+        raise PreventUpdate
+    entries = list(entries or [])
+    if not entries:
+        return no_update, html.Span(
+            "生徒（衣装）を追加してください。", style={"color": "red"}
+        )
+    ranks, remains, n = _overlay_bond_ranks(
+        bond_ranks,
+        [e["costume_id"] for e in entries],
+        _values_by_index(rank_values, rank_ids),
+        _values_by_index(remain_values, remain_ids),
+    )
+    return (
+        _rb_costume_rows(
+            entries, ranks, remains, _values_by_index(target_values, target_ids)
+        ),
+        _bond_ranks_applied_feedback(n),
+    )
+
+
+@callback(
+    Output("bond-ranks", "data", allow_duplicate=True),
+    Output("rb-bond-ranks-feedback", "children", allow_duplicate=True),
+    Input("rb-save-bond-ranks-btn", "n_clicks"),
+    State("bond-ranks", "data"),
+    State("rb-costumes", "data"),
+    State({"type": "rb-bond-rank", "index": ALL}, "value"),
+    State({"type": "rb-bond-rank", "index": ALL}, "id"),
+    State({"type": "rb-bond-remain", "index": ALL}, "value"),
+    State({"type": "rb-bond-remain", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def rb_save_bond_ranks(
+    n_clicks, bond_ranks, entries, rank_values, rank_ids, remain_values, remain_ids
+):
+    """入力中の 絆ランク / 残りEXP を絆ランク管理に保存する。"""
+    if not n_clicks:
+        raise PreventUpdate
+    entries = list(entries or [])
+    if not entries:
+        return no_update, html.Span(
+            "生徒（衣装）を追加してください。", style={"color": "red"}
+        )
+    saved, n = _save_inputs_to_bond_ranks(
+        bond_ranks,
+        [e["costume_id"] for e in entries],
+        _values_by_index(rank_values, rank_ids),
+        _values_by_index(remain_values, remain_ids),
+    )
+    return (saved if n else no_update), _bond_ranks_saved_feedback(n)
 
 
 @callback(
@@ -1904,6 +2160,7 @@ def _make_priority_cards(priority_data):
     State({"type": "costume", "index": ALL}, "value"),
     State({"type": "costume", "index": ALL}, "id"),
     State("costume-priority-order", "data"),
+    State("bond-ranks", "data"),
     prevent_initial_call=True,
 )
 def update_students(
@@ -1920,6 +2177,7 @@ def update_students(
     costume_values,
     costume_ids,
     priority_order,
+    bond_ranks,
 ):
     trigger = ctx.triggered_id
 
@@ -1997,6 +2255,10 @@ def update_students(
         if not result:
             raise PreventUpdate
         display_name, students = result
+        # 絆ランク管理で設定済みの衣装は保存値を初期値にする
+        saved_ranks, _ = ranks_for_costumes(
+            bond_ranks, [s.get("costume_id") for s in students]
+        )
         new_children = []
         new_indices = []
         new_rank_children = []
@@ -2014,6 +2276,7 @@ def update_students(
                 _make_bond_rank_input(
                     i,
                     costume_name=s["costume_name"],
+                    value=saved_ranks.get(i, 20),
                 )
             )
             preset_costume_map[i] = s["costume_name"]
@@ -2217,6 +2480,108 @@ def restore_autosave(_n, data):
 
     # プリセット未選択: デフォルト状態（衣装1つ）
     return (no_update,) * 8 + (True,)
+
+
+@callback(
+    Output("co-loaded-costumes", "data"),
+    Input("load-preset-btn", "n_clicks"),
+    Input("autosave-init", "n_intervals"),
+    State("preset-dropdown", "value"),
+    State("preset-status-radio", "value"),
+    State("autosave", "data"),
+    prevent_initial_call=True,
+)
+def co_track_loaded_costumes(_clicks, _n, dropdown_value, status_value, autosave):
+    """読み込んだ（自動保存から復元した）プリセットの衣装名と衣装IDを保持する。
+
+    update_students / restore_autosave と同じプリセット値から求める。
+    """
+    if ctx.triggered_id == "autosave-init":
+        preset_value = (autosave or {}).get("preset_value")
+    else:
+        preset_value = _combined_preset_value(dropdown_value, status_value)
+    result = get_preset_data(preset_value) if preset_value else None
+    if not result:
+        raise PreventUpdate
+    return [
+        {"costume_name": c["costume_name"], "costume_id": c.get("costume_id")}
+        for c in result[1]
+    ]
+
+
+def _co_costume_ids(loaded, costume_values, costume_ids, rank_ids) -> list:
+    """絆ランク入力欄の並びに対応する costume_id（不明なら None）を返す。
+
+    衣装カードの衣装名が、読み込んだプリセットの衣装名と一致するものだけ
+    対応付ける（手入力・改名した衣装は None）。
+    """
+    cid_by_name = {
+        c["costume_name"]: c["costume_id"]
+        for c in loaded or []
+        if c.get("costume_id") is not None
+    }
+    name_by_index = {cid["index"]: v for v, cid in zip(costume_values, costume_ids)}
+    return [cid_by_name.get(name_by_index.get(rid["index"])) for rid in rank_ids]
+
+
+@callback(
+    Output({"type": "bond-rank", "index": ALL}, "value", allow_duplicate=True),
+    Output("co-bond-ranks-feedback", "children"),
+    Input("co-apply-bond-ranks-btn", "n_clicks"),
+    State("bond-ranks", "data"),
+    State("co-loaded-costumes", "data"),
+    State({"type": "costume", "index": ALL}, "value"),
+    State({"type": "costume", "index": ALL}, "id"),
+    State({"type": "bond-rank", "index": ALL}, "value"),
+    State({"type": "bond-rank", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def co_apply_bond_ranks(
+    n_clicks, bond_ranks, loaded, costume_values, costume_ids, rank_values, rank_ids
+):
+    """絆ランク管理で設定済みの衣装の絆ランクで入力欄を上書きする。"""
+    if not n_clicks:
+        raise PreventUpdate
+    saved_ranks, _ = ranks_for_costumes(
+        bond_ranks, _co_costume_ids(loaded, costume_values, costume_ids, rank_ids)
+    )
+    values = [saved_ranks.get(i, v) for i, v in enumerate(rank_values)]
+    return values, _bond_ranks_applied_feedback(len(saved_ranks))
+
+
+@callback(
+    Output("bond-ranks", "data", allow_duplicate=True),
+    Output("co-bond-ranks-feedback", "children", allow_duplicate=True),
+    Input("co-save-bond-ranks-btn", "n_clicks"),
+    State("bond-ranks", "data"),
+    State("co-loaded-costumes", "data"),
+    State({"type": "costume", "index": ALL}, "value"),
+    State({"type": "costume", "index": ALL}, "id"),
+    State({"type": "bond-rank", "index": ALL}, "value"),
+    State({"type": "bond-rank", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def co_save_bond_ranks(
+    n_clicks, bond_ranks, loaded, costume_values, costume_ids, rank_values, rank_ids
+):
+    """入力中の絆ランクを絆ランク管理に保存する（プリセットの衣装のみ）。
+
+    このページには残りEXPの入力欄が無いため、絆ランクが変わらない衣装は
+    保存済みの残りEXPを保持する。
+    """
+    if not n_clicks:
+        raise PreventUpdate
+    saved, n = _save_inputs_to_bond_ranks(
+        bond_ranks,
+        _co_costume_ids(loaded, costume_values, costume_ids, rank_ids),
+        dict(enumerate(rank_values)),
+    )
+    if n == 0:
+        return no_update, html.Span(
+            "保存できる衣装がありません（プリセットを読み込んだ衣装のみ保存できます）。",
+            style={"color": "red"},
+        )
+    return saved, _bond_ranks_saved_feedback(n)
 
 
 @callback(
@@ -2756,3 +3121,118 @@ def nc_craft_exp(costume_ids, use_weight, weight_values, weight_ids):
     weighted = bool(use_weight)
     members = _nc_members(costume_ids, weighted, weight_values, weight_ids)
     return _nc_craft_result(craft_expected_exp(gifts, members), weighted)
+
+
+# ======================================================================
+# 絆ランク管理ページ
+# ======================================================================
+
+# 絆ランク欄は min/max を付けない（範囲外の値が None になり「空欄 =
+# 未設定に戻す」と区別できなくなるため）。範囲外は保存せず赤枠で示す。
+BM_RANK_STYLE = {"width": "80px", "textAlign": "center"}
+
+
+def _bm_rows(bond_ranks, options: list[dict]) -> list:
+    """全衣装の 現在絆ランク / 残りEXP 入力行を生成する。
+
+    並びは衣装ドロップダウンの表示順（生徒の優先度順）。未設定の衣装は空欄。
+    """
+    by_cid = {e["costume_id"]: e for e in normalize_bond_ranks(bond_ranks)}
+    rows = []
+    for o in options:
+        cid = o["value"]
+        e = by_cid.get(cid) or {}
+        rows.append(
+            html.Div(
+                [
+                    html.Strong(
+                        o["label"],
+                        style={"minWidth": "180px", "display": "inline-block"},
+                    ),
+                    html.Span("現在の絆ランク: ", style={"fontSize": "0.8rem"}),
+                    dcc.Input(
+                        id={"type": "bm-rank", "costume": cid},
+                        type="number",
+                        value=e.get("rank"),
+                        debounce=True,
+                        placeholder="未設定",
+                        style=BM_RANK_STYLE,
+                    ),
+                    html.Span(
+                        "次の絆まで残りEXP: ",
+                        style={"fontSize": "0.8rem", "marginLeft": "8px"},
+                        title=(
+                            "次の絆ランクまでの残り経験値（任意）。"
+                            "空欄なら現在ランクの開始（経験値0）として計算。"
+                        ),
+                    ),
+                    dcc.Input(
+                        id={"type": "bm-remain", "costume": cid},
+                        type="number",
+                        min=1,
+                        value=e.get("remain"),
+                        debounce=True,
+                        placeholder="任意",
+                        style={"width": "72px", "textAlign": "center"},
+                    ),
+                ],
+                id={"type": "bm-row", "costume": cid},
+                className="bm-row",
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "4px",
+                    "flexWrap": "wrap",
+                    "padding": "6px 0",
+                    "borderBottom": "1px solid #eee",
+                },
+            )
+        )
+    if not rows:
+        return html.P(
+            "衣装データがありません。", style={"color": "#888", "margin": "8px 0"}
+        )
+    return rows
+
+
+@callback(
+    Output("bm-container", "children"),
+    Input("bm-init", "n_intervals"),
+    State("bond-ranks", "data"),
+    prevent_initial_call=True,
+)
+def bm_render(_n, bond_ranks):
+    """保存データを読んで全衣装の行を描画する（ページ表示時に1回）。
+
+    入力値の保存は bm_save_edits が行う。入力のたびに行を再生成すると
+    フォーカスを失うため、描画はここだけで行う。
+    """
+    return _bm_rows(bond_ranks, get_costume_options())
+
+
+@callback(
+    Output("bond-ranks", "data", allow_duplicate=True),
+    Output("bm-count", "children"),
+    Input({"type": "bm-rank", "costume": ALL}, "value"),
+    Input({"type": "bm-remain", "costume": ALL}, "value"),
+    State({"type": "bm-rank", "costume": ALL}, "id"),
+    State({"type": "bm-remain", "costume": ALL}, "id"),
+    State("bond-ranks", "data"),
+    prevent_initial_call=True,
+)
+def bm_save_edits(rank_values, remain_values, rank_ids, remain_ids, bond_ranks):
+    """入力欄の値を保存する。絆ランクを空欄にした衣装は未設定に戻す。
+
+    行が無い（描画前）ときは何もしない。入力欄に無い衣装は変更しない。
+    """
+    if not rank_ids:
+        raise PreventUpdate
+    saved = apply_page_edits(
+        bond_ranks,
+        {rid["costume"]: v for v, rid in zip(rank_values, rank_ids)},
+        {rid["costume"]: v for v, rid in zip(remain_values, remain_ids)},
+    )
+    count = f"設定済み {len(saved['costumes'])} / {len(rank_ids)} 衣装"
+    if saved["costumes"] == normalize_bond_ranks(bond_ranks):
+        return no_update, count
+    return saved, count

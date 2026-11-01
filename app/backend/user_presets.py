@@ -405,11 +405,12 @@ def parse_preset_value(dropdown_value: str) -> tuple[str, str] | None:
 
 def _load_costume_grouped() -> dict[tuple[str, str], list[dict]]:
     """costume と bond_bonus を結合し、(生徒名, ステータス名) ごとに
-    [{costume_name, bond_bonuses}, ...] へまとめて返す。"""
+    [{costume_id, costume_name, bond_bonuses}, ...] へまとめて返す。"""
     conn = _get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT c.student_name, bb.status_name, c.costume_name, bb.bond_bonuses "
+            "SELECT c.student_name, bb.status_name, c.id, c.costume_name, "
+            "bb.bond_bonuses "
             "FROM costume c "
             "JOIN bond_bonus bb ON bb.costume_id = c.id "
             "LEFT JOIN student_priority sp ON sp.student_name = c.student_name "
@@ -418,9 +419,10 @@ def _load_costume_grouped() -> dict[tuple[str, str], list[dict]]:
         )
         rows = cur.fetchall()
     grouped: dict[tuple[str, str], list[dict]] = {}
-    for student_name, status_name, costume_name, bond_bonuses in rows:
+    for student_name, status_name, costume_id, costume_name, bond_bonuses in rows:
         grouped.setdefault((student_name, status_name), []).append(
             {
+                "costume_id": costume_id,
                 "costume_name": costume_name,
                 "bond_bonuses": list(bond_bonuses),
             }
@@ -655,8 +657,8 @@ def get_preset_data(dropdown_value: str) -> tuple[str, list[dict]] | None:
     Returns
     -------
     tuple[str, list[dict]] | None
-        (表示名, [{costume_name, bond_bonuses}, ...]) のタプル。
-        見つからなければ None。
+        (表示名, [{costume_id, costume_name, bond_bonuses}, ...]) のタプル。
+        見つからなければ None。DB未接続時（JSON）は costume_id を含まない。
     """
     if not _DATABASE_URL:
         presets = load_user_presets()

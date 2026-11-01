@@ -554,3 +554,8 @@ input[type="number"] {
         grid-template-columns: repeat(4, 1fr) !important;
     }
 }
+
+/* 絆ランク管理: 絞り込みで非表示にした行（インラインの display:flex より優先） */
+.bm-hidden {
+    display: none !important;
+}
