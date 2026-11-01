@@ -137,12 +137,16 @@ def login_user(provider: str, subject: str) -> int:
 
 
 def get_user(user_id: int) -> dict | None:
-    """{"id", "provider"}。削除済みなら None。"""
+    """{"id", "provider", "subject"}。削除済みなら None。"""
     _ensure_tables()
     with _cursor() as cur:
-        cur.execute("SELECT id, provider FROM app_users WHERE id = %s", (user_id,))
+        cur.execute(
+            "SELECT id, provider, subject FROM app_users WHERE id = %s", (user_id,)
+        )
         row = cur.fetchone()
-    return None if row is None else {"id": row[0], "provider": row[1]}
+    if row is None:
+        return None
+    return {"id": row[0], "provider": row[1], "subject": row[2]}
 
 
 def delete_user(user_id: int) -> None:
@@ -202,7 +206,7 @@ def pop_auth_error() -> str | None:
 
 
 def current_user() -> dict | None:
-    """ログイン中のユーザー {"id", "provider"}。
+    """ログイン中のユーザー {"id", "provider", "subject"}。
 
     未ログイン・削除済み・DB に接続できないときは None（削除済みなら
     セッションからも消す）。
@@ -218,3 +222,24 @@ def current_user() -> dict | None:
     if user is None:
         session.pop("user_id", None)
     return user
+
+
+# ======================================================================
+# 管理者
+# ======================================================================
+
+
+def admin_google_sub() -> str:
+    """管理者の Google アカウントの subject（ADMIN_GOOGLE_SUB）。未設定なら空。"""
+    return os.environ.get("ADMIN_GOOGLE_SUB", "").strip()
+
+
+def is_admin(user: dict | None) -> bool:
+    """user（current_user の値）が管理者の Google アカウントか。"""
+    admin_sub = admin_google_sub()
+    return (
+        bool(admin_sub)
+        and user is not None
+        and user.get("provider") == "google"
+        and user.get("subject") == admin_sub
+    )

@@ -9,7 +9,6 @@ from flask import request
 from app import app as application
 from app.frontend.layout import create_root_layout
 import app.frontend.callbacks  # noqa: F401 - コールバック登録
-import app.backend.api  # noqa: F401 - API エンドポイント登録
 import app.backend.admin  # noqa: F401 - 管理画面登録
 import app.backend.auth  # noqa: F401 - ログイン登録
 

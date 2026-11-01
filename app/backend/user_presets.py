@@ -35,12 +35,6 @@ def _json_read() -> dict:
     return data.get("presets", {})
 
 
-def _json_write(presets: dict) -> None:
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump({"presets": presets}, f, ensure_ascii=False, indent=2)
-
-
 # ======================================================================
 # PostgreSQL バックエンド
 # ======================================================================
@@ -204,42 +198,6 @@ def load_user_presets() -> dict:
     else:
         with _lock:
             return _json_read()
-
-
-def approve_preset(key: str) -> bool:
-    """プリセットを承認する。"""
-    if _DATABASE_URL:
-        conn = _get_conn()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE user_presets SET approved = TRUE WHERE key = %s", (key,)
-            )
-            return cur.rowcount > 0
-    else:
-        with _lock:
-            presets = _json_read()
-            if key not in presets:
-                return False
-            presets[key]["approved"] = True
-            _json_write(presets)
-        return True
-
-
-def delete_preset(key: str) -> bool:
-    """プリセットを削除する。"""
-    if _DATABASE_URL:
-        conn = _get_conn()
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM user_presets WHERE key = %s", (key,))
-            return cur.rowcount > 0
-    else:
-        with _lock:
-            presets = _json_read()
-            if key not in presets:
-                return False
-            del presets[key]
-            _json_write(presets)
-        return True
 
 
 # ======================================================================
