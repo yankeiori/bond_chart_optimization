@@ -52,4 +52,10 @@ def test_second_tier_ranking():
 
 def test_page_lists_every_node():
     assert len(fn_ranking(2)) == len(furniture_node_ranking(2))
-    assert create_furniture_node_layout() is not None
+
+
+def test_page_shows_only_second_tier():
+    text = str(create_furniture_node_layout())
+    assert "2次ノード" in text
+    assert "1次ノード" not in text
+    assert "3次ノード" not in text
