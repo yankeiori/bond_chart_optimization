@@ -146,13 +146,21 @@ application.clientside_callback(
     State("bm-ocr-crops", "data"),
 )
 
-# --- 絆ランク管理: 絆ランクの一覧を画像で保存（assets/bond_image.js） ---
+# --- 絆ランク管理: 絆ランクの一覧を画像にして表示（assets/bond_image.js） ---
 application.clientside_callback(
     ClientsideFunction("bond_image", "save"),
+    Output("bm-image", "src"),
+    Output("bm-image-modal", "style", allow_duplicate=True),
     Output("bm-image-feedback", "children"),
     Input("bm-save-image-btn", "n_clicks"),
     State("bond-ranks", "data"),
     State("bm-ocr-refs", "data"),
+    prevent_initial_call=True,
+)
+application.clientside_callback(
+    "function(n) { return {display: 'none'}; }",
+    Output("bm-image-modal", "style"),
+    Input("close-bm-image-btn", "n_clicks"),
     prevent_initial_call=True,
 )
 
