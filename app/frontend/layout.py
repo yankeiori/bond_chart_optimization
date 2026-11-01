@@ -742,6 +742,8 @@ def create_layout() -> html.Div:
             # 読み込んだプリセットの衣装 [{costume_name, costume_id}, ...]。
             # 衣装カードと絆ランク管理の衣装を衣装名で対応付けるのに使う。
             dcc.Store(id="co-loaded-costumes", data=[]),
+            # 結果表の列見出しに出す生徒画像 {衣装 index: URL}
+            dcc.Store(id="co-costume-icons", data={}),
             dcc.Interval(id="autosave-init", max_intervals=1, interval=200),
             _footer(),
         ],

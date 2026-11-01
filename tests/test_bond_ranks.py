@@ -160,7 +160,7 @@ class TestBmRows:
         data = _data({"costume_id": 2, "rank": 30, "remain": 4})
         options = [{"value": 1, "label": "ホシノ"}, {"value": 2, "label": "ノア"}]
         rows = _bm_rows(data, options)
-        assert [r.children[0].children for r in rows] == ["ホシノ", "ノア"]
+        assert [r.children[0].children[-1] for r in rows] == ["ホシノ", "ノア"]
         rank = [r.children[1].children[1] for r in rows]
         remain = [r.children[2].children[1] for r in rows]
         assert rank[0].value is None  # 未設定

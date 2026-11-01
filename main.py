@@ -60,6 +60,7 @@ application.clientside_callback(
     State({"type": "costume", "index": ALL}, "id"),
     State("costume-priority-order", "data"),
     State("bond50-penalty", "value"),
+    State("co-costume-icons", "data"),
     prevent_initial_call=True,
 )
 

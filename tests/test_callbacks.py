@@ -3,6 +3,8 @@
 コールバック本体はDashサーバーが必要なため、純粋関数のみ検証する。
 """
 
+from urllib.parse import quote
+
 from app.frontend.callbacks import (
     _gift_inputs_to_maps,
     _gs_costume_rows,
@@ -14,6 +16,7 @@ from app.frontend.callbacks import (
     _rb_shift_indices,
     _rb_swap_indices,
     _values_by_index,
+    _with_student_icon,
 )
 
 
@@ -230,8 +233,8 @@ class TestGsCostumeRows:
     def test_order_changes_display_not_indices(self):
         rows = _gs_costume_rows(self.COSTUMES, order=[1, 0])
         # 表示順は order どおり
-        assert rows[0].children[3].children == "水着"
-        assert rows[1].children[3].children == "通常"
+        assert rows[0].children[3].children[-1] == "水着"
+        assert rows[1].children[3].children[-1] == "通常"
         # 入力の index は衣装 index のまま。端のボタンだけが無効になる
         comps = self._components(rows)
         assert comps[("gs-move-up", 1)].disabled is True
@@ -268,3 +271,17 @@ class TestGsFurnitureCell:
         ]
         assert divs[1].children[1].children == "（共通: トキ、アリス（メイド））"
         assert len(divs[2].children) == 1  # 共通キャラなしは注記を出さない
+
+
+class TestWithStudentIcon:
+    def test_icon_before_label(self):
+        icon, text = _with_student_icon("ホシノ（水着）")
+        assert icon.src == "/assets/student/" + quote("ホシノ（水着）") + ".png"
+        assert text == "ホシノ（水着）"
+
+    def test_custom_text(self):
+        assert _with_student_icon("ホシノ（水着）", "水着")[-1] == "水着"
+
+    def test_no_image(self):
+        assert _with_student_icon("衣装1") == ["衣装1"]
+        assert _with_student_icon("", "通常") == ["通常"]

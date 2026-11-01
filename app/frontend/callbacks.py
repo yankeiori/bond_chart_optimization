@@ -1,5 +1,8 @@
 """サーバーサイドコールバック。"""
 
+from pathlib import Path
+from urllib.parse import quote
+
 from dash import html, dcc, callback, Input, Output, State, ALL, ctx, no_update
 from dash.exceptions import PreventUpdate
 
@@ -180,6 +183,73 @@ _MOVE_BTN_STYLE = {
     "lineHeight": "1",
 }
 
+# 生徒画像（scripts/fetch_student_icons.py で取得）。ファイル名は衣装の表示名
+_STUDENT_ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "student"
+_STUDENT_ICONS = {p.stem for p in _STUDENT_ICON_DIR.glob("*.png")}
+
+
+def _student_icon_src(label: str) -> str | None:
+    """衣装の表示名 label の生徒画像の URL。画像が無い衣装は None。"""
+    if label not in _STUDENT_ICONS:
+        return None
+    return f"/assets/student/{quote(label)}.png"
+
+
+def _student_icon(label: str, size: int = 32):
+    """衣装の表示名 label の生徒画像。画像が無い衣装は None。"""
+    src = _student_icon_src(label)
+    if src is None:
+        return None
+    return html.Img(
+        src=src,
+        alt="",
+        style={
+            "width": f"{size}px",
+            "height": f"{size}px",
+            "objectFit": "cover",
+            "objectPosition": "top",
+            "borderRadius": "4px",
+            "verticalAlign": "middle",
+            "marginRight": "6px",
+            "flexShrink": "0",
+        },
+    )
+
+
+def _with_student_icon(label: str, text=None, size: int = 32) -> list:
+    """衣装の表示名 label の生徒画像を text（既定は label）の前に付けた children。
+
+    画像が無い衣装は text のみ。
+    """
+    text = label if text is None else text
+    icon = _student_icon(label, size)
+    return [text] if icon is None else [icon, text]
+
+
+def _student_header(label: str, text=None):
+    """結果表の列見出し。生徒画像があれば text（既定は label）の上に置く。"""
+    text = label if text is None else text
+    src = _student_icon_src(label)
+    if src is None:
+        return text
+    return html.Div(
+        [
+            html.Img(
+                src=src,
+                alt="",
+                style={
+                    "width": "32px",
+                    "height": "32px",
+                    "objectFit": "cover",
+                    "objectPosition": "top",
+                    "borderRadius": "4px",
+                },
+            ),
+            html.Div(text),
+        ],
+        style={"display": "flex", "flexDirection": "column", "alignItems": "center"},
+    )
+
 
 def _gs_normalize_order(order, n: int) -> list[int]:
     """優先順位（衣装 index の並び）を正規化する。
@@ -214,6 +284,7 @@ def _gs_costume_rows(
     rank_by_index = rank_by_index or {}
     remain_by_index = remain_by_index or {}
     order = _gs_normalize_order(order, len(costumes))
+    labels = _nc_costume_labels()
     rows = []
     for pos, i in enumerate(order):
         c = costumes[i]
@@ -264,7 +335,9 @@ def _gs_costume_rows(
                         style=_MOVE_BTN_STYLE,
                     ),
                     html.Strong(
-                        c["costume_name"],
+                        _with_student_icon(
+                            labels.get(c.get("costume_id"), ""), c["costume_name"]
+                        ),
                         style={"minWidth": "70px", "display": "inline-block"},
                     ),
                     html.Div(
@@ -950,7 +1023,7 @@ def _gs_result_table(
 
     header = html.Tr(
         [html.Th("贈り物 ＼ 衣装", style=_TH)]
-        + [html.Th(n, style=_TH) for n in col_names]
+        + [html.Th(n, style={**_TH, "verticalAlign": "bottom"}) for n in col_names]
     )
 
     body = []
@@ -1272,7 +1345,14 @@ def gs_calculate(
         _cols(alloc[pool_idx_high]) if pool_idx_high is not None else None
     )
 
-    col_names = [costumes[ci]["costume_name"] for ci in order]
+    labels = _nc_costume_labels()
+    col_names = [
+        _student_header(
+            labels.get(costumes[ci].get("costume_id"), ""),
+            costumes[ci]["costume_name"],
+        )
+        for ci in order
+    ]
     table = _gs_result_table(
         col_names,
         individual_gifts,
@@ -1376,9 +1456,9 @@ def _rb_costume_rows(entries: list[dict], ranks=None, remains=None, targets=None
                         style=_MOVE_BTN_STYLE,
                     ),
                     html.Strong(
-                        e["label"],
+                        _with_student_icon(e["label"]),
                         style={
-                            "minWidth": "140px",
+                            "minWidth": "178px",
                             "display": "inline-block",
                             "marginLeft": "4px",
                         },
@@ -1858,7 +1938,13 @@ def rb_calculate(
         body.append(
             html.Tr(
                 [
-                    html.Td(e["label"], style=_TD_LABEL),
+                    html.Td(
+                        html.Div(
+                            _with_student_icon(e["label"], size=24),
+                            style={"display": "flex", "alignItems": "center"},
+                        ),
+                        style=_TD_LABEL,
+                    ),
                     html.Td(f"絆{cur} → 絆{tgt}", style=_TD),
                     html.Td(
                         f"{need_exp:,}",
@@ -1937,7 +2023,7 @@ def rb_calculate(
                 },
             ),
             _gs_result_table(
-                [e["label"] for e in entries],
+                [_student_header(e["label"]) for e in entries],
                 individual_gifts,
                 alloc[:n_ind],
                 result["final_ranks"],
@@ -2302,14 +2388,32 @@ def update_students(
 
 @callback(
     Output({"type": "bond-rank-label", "index": ALL}, "children"),
+    Output("co-costume-icons", "data"),
     Input({"type": "costume", "index": ALL}, "value"),
+    Input("co-loaded-costumes", "data"),
     State({"type": "costume", "index": ALL}, "id"),
 )
-def sync_bond_rank_labels(costume_values, costume_ids):
-    return [
+def sync_bond_rank_labels(costume_values, loaded, costume_ids):
+    """絆ランク欄のラベルと結果表の生徒画像 {衣装 index: URL} を衣装名に合わせる。
+
+    生徒画像はプリセットから読み込んだ衣装（衣装名が一致するもの）のみ。
+    """
+    cids = _co_costume_ids(loaded, costume_values, costume_ids, costume_ids)
+    labels = _nc_costume_labels() if any(c is not None for c in cids) else {}
+    student_labels = [labels.get(c, "") for c in cids]
+    names = [
         v or _default_costume_name(cid["index"])
         for v, cid in zip(costume_values, costume_ids)
     ]
+    icons = {
+        cid["index"]: src
+        for sl, cid in zip(student_labels, costume_ids)
+        if (src := _student_icon_src(sl))
+    }
+    return (
+        [_with_student_icon(sl, n, 24) for sl, n in zip(student_labels, names)],
+        icons,
+    )
 
 
 _BOND_RANK_BASE_STYLE = {"width": "50px", "textAlign": "center"}
@@ -3076,8 +3180,8 @@ def _bm_rows(bond_ranks, options: list[dict]) -> list:
             html.Div(
                 [
                     html.Strong(
-                        o["label"],
-                        style={"minWidth": "180px", "display": "inline-block"},
+                        _with_student_icon(o["label"]),
+                        style={"minWidth": "210px", "display": "inline-block"},
                     ),
                     html.Span(
                         [
