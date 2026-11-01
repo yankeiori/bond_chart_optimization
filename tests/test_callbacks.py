@@ -6,10 +6,12 @@
 from urllib.parse import quote
 
 from app.frontend.callbacks import (
+    _bond_view_texts,
     _gift_inputs_to_maps,
     _gs_costume_rows,
     _gs_furniture_cell,
     _gs_normalize_order,
+    _gs_parse_current_ranks,
     _rb_costume_rows,
     _rb_int_keys,
     _rb_merge_use_flags,
@@ -196,6 +198,12 @@ class TestGsNormalizeOrder:
         assert _gs_normalize_order([0, 1, 2], 2) == [0, 1]
 
 
+class TestGsParseCurrentRanks:
+    def test_rank_over_50_is_treated_as_50(self):
+        ids = [{"index": i} for i in range(4)]
+        assert _gs_parse_current_ranks([51, 100, None, 0], ids, 4) == [50, 50, 20, 1]
+
+
 class TestGsCostumeRows:
     COSTUMES = [
         {"costume_name": "通常", "bond_bonuses": [1, 0, 0, 0, 0, 0, 0]},
@@ -285,3 +293,26 @@ class TestWithStudentIcon:
     def test_no_image(self):
         assert _with_student_icon("衣装1") == ["衣装1"]
         assert _with_student_icon("", "通常") == ["通常"]
+
+
+class TestBondViewTexts:
+    def test_matches_by_index_not_order(self):
+        ids = [
+            {"type": "bond", "range_idx": 0, "index": 0},
+            {"type": "bond", "range_idx": 0, "index": 2},
+        ]
+        view_ids = [
+            {"type": "bond-view", "range_idx": 0, "index": 2},
+            {"type": "bond-view", "range_idx": 0, "index": 0},
+        ]
+        assert _bond_view_texts([3, 5], ids, view_ids) == ["5", "3"]
+
+    def test_formats_empty_and_float(self):
+        ids = [{"range_idx": i, "index": 0} for i in range(3)]
+        view_ids = ids + [{"range_idx": 3, "index": 0}]
+        assert _bond_view_texts([None, 4.0, 2.5], ids, view_ids) == [
+            "－",
+            "4",
+            "2.5",
+            "－",
+        ]

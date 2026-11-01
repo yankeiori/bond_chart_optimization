@@ -59,19 +59,6 @@ _GIFT_SELECT_BOX_ID = "gift-select-box"
 
 server = app.server
 
-# FLASK_SECRET_KEY が未設定でも、毎起動でランダム生成して既知キーでの
-# セッション偽造を防ぐ（再起動で管理者は再ログインになる副作用あり）。
-server.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32).hex()
-
-# 管理者セッション Cookie の保護設定。PORT 環境変数は gunicorn/Render など
-# 本番ホスティング下でセットされる想定で、その場合のみ Secure を強制する
-# （ローカル HTTP 開発では Secure を切らないと Cookie が送信されない）。
-server.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE="PORT" in os.environ,
-)
-
 _ADMIN_PASSWORD = os.environ.get("PRESET_ADMIN_TOKEN", "")
 
 _RANGE_LABELS = [f"{lo}~{hi}" for lo, hi in BOND_RANGES]

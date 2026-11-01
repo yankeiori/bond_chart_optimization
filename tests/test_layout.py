@@ -14,6 +14,7 @@ from app.frontend.layout import (
     make_student_card,
     _make_bond_rank_input,
     _default_costume_name,
+    NAV_GROUPS,
     PAGES,
 )
 
@@ -86,20 +87,13 @@ class TestCreateLayout:
     def test_page_container_class(self, layout):
         assert layout.className == "page-container"
 
-    def test_has_header(self, layout):
-        found = _find_by_class(layout, "page-header")
+    def test_has_page_intro(self, layout):
+        found = _find_by_class(layout, "page-intro")
         assert len(found) == 1
+        assert len(_find_by_id(found[0], "open-manual-btn")) == 1
 
-    def test_has_header_right(self, layout):
-        found = _find_by_class(layout, "page-header-right")
-        assert len(found) == 1
-
-    def test_has_sidebar(self, layout):
-        found = _find_by_class(layout, "sidebar")
-        assert len(found) == 1
-
-    def test_has_main_columns(self, layout):
-        found = _find_by_class(layout, "main-columns")
+    def test_has_preset_section(self, layout):
+        found = _find_by_class(layout, "preset-section")
         assert len(found) == 1
 
     def test_has_preset_dropdown(self, layout):
@@ -137,6 +131,13 @@ class TestCreateLayout:
         for store_id in ("student-indices", "next-student-index", "solver-inputs"):
             found = _find_by_id(layout, store_id)
             assert len(found) == 1, f"Store '{store_id}' が見つからない"
+
+    def test_student_cards_in_manual_edit(self, layout):
+        # 絆ボーナスの入力（衣装カード）は折りたたみの中に置く
+        manual = _find_by_class(layout, "manual-edit")
+        assert len(manual) == 1
+        assert len(_find_by_id(manual[0], "students-container")) == 1
+        assert len(_find_by_id(manual[0], "add-student-btn")) == 1
 
     def test_default_student_card_count(self, layout):
         found = _find_by_id(layout, "students-container")
@@ -192,7 +193,7 @@ class TestRequiredExpLayout:
 
 
 # ---------------------------------------------------------------------------
-# 共通ヘッダー（タイトル・報告先・ページ切替タブ）
+# 共通ヘッダー（タイトル・ログイン・カテゴリ付きタブ）
 # ---------------------------------------------------------------------------
 
 
@@ -211,10 +212,20 @@ class TestSiteHeader:
         assert len(_find_by_id(root, "page-content")) == 1
 
     def test_tabs_cover_all_pages(self, root):
-        tab_bars = _find_by_class(root, "page-tabs")
-        assert len(tab_bars) == 1
+        assert len(_find_by_class(root, "page-tabs")) == 1
         tabs = _find_by_class(root, "page-tab")
         assert {t.href for t in tabs} == set(PAGES.keys())
+
+    def test_tabs_grouped_by_category(self, root):
+        groups = _find_by_class(root, "tab-group")
+        assert len(groups) == len(NAV_GROUPS)
+        paths = [p for _, group in NAV_GROUPS for p in group]
+        assert sorted(paths) == sorted(PAGES.keys())
+
+    def test_login_in_header(self, monkeypatch):
+        monkeypatch.setattr("app.frontend.layout.enabled_providers", lambda: ["google"])
+        header = _find_by_class(create_root_layout(), "site-header")[0]
+        assert len(_find_by_class(header, "header-account")) == 1
 
     @pytest.mark.parametrize("path", list(PAGES.keys()))
     def test_pages_have_no_own_tabs(self, path):
@@ -314,6 +325,19 @@ class TestMakeBondRankInput:
         inp = _make_bond_rank_input(0, costume_name="通常")
         labels = _find_by_id(inp, {"type": "bond-rank-label", "index": 0})
         assert labels[0].children == "通常"
+
+    def test_bond_views(self):
+        inp = _make_bond_rank_input(1, bond_bonuses=[1, 2, 3, 4, 5, 6, 7])
+        views = [
+            _find_by_id(inp, {"type": "bond-view", "range_idx": i, "index": 1})[0]
+            for i in range(len(BOND_RANGES))
+        ]
+        assert [v.children for v in views] == ["1", "2", "3", "4", "5", "6", "7"]
+
+    def test_bond_views_default_zero(self):
+        inp = _make_bond_rank_input(0)
+        view = _find_by_id(inp, {"type": "bond-view", "range_idx": 0, "index": 0})
+        assert view[0].children == "0"
 
 
 # ---------------------------------------------------------------------------
