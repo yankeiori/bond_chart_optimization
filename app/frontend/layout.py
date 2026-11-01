@@ -1608,6 +1608,18 @@ def create_bond_ranks_layout() -> html.Div:
                                 value=[],
                                 style={"fontSize": "0.85rem"},
                             ),
+                            dcc.Dropdown(
+                                id="bm-sort",
+                                options=[
+                                    {"label": "標準の並び", "value": "default"},
+                                    {"label": "絆ランクが高い順", "value": "desc"},
+                                    {"label": "絆ランクが低い順", "value": "asc"},
+                                ],
+                                value="default",
+                                clearable=False,
+                                searchable=False,
+                                style={"width": "180px", "fontSize": "0.85rem"},
+                            ),
                             html.Span(
                                 id="bm-count",
                                 style={"color": "#888", "fontSize": "0.8rem"},

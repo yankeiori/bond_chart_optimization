@@ -130,6 +130,39 @@ application.clientside_callback(
     State({"type": "bm-rank", "costume": ALL}, "value"),
 )
 
+# --- 絆ランク管理: 絆ランク順の並び替え ---
+# 行を作り直すと入力中のフォーカスが外れるため、グリッドの order で並べ替える。
+# 未設定の衣装は常に末尾、同じ絆ランクは標準の並び（生徒の優先度順）のまま。
+application.clientside_callback(
+    """
+    function(sort, rankValues, rankIds, ids) {
+        if (sort !== 'desc' && sort !== 'asc') return ids.map(() => ({}));
+        const rankByCostume = {};
+        rankIds.forEach(function (id, i) {
+            const v = rankValues[i];
+            if (typeof v === 'number') rankByCostume[id.costume] = v;
+        });
+        const sign = sort === 'desc' ? -1 : 1;
+        const order = ids.map((id, i) => i).sort(function (a, b) {
+            const ra = rankByCostume[ids[a].costume];
+            const rb = rankByCostume[ids[b].costume];
+            const ua = ra === undefined, ub = rb === undefined;
+            if (ua !== ub) return ua ? 1 : -1;
+            if (!ua && ra !== rb) return sign * (ra - rb);
+            return a - b;
+        });
+        const pos = [];
+        order.forEach(function (i, k) { pos[i] = k; });
+        return ids.map((id, i) => ({order: pos[i]}));
+    }
+    """,
+    Output({"type": "bm-row", "costume": ALL}, "style"),
+    Input("bm-sort", "value"),
+    Input({"type": "bm-rank", "costume": ALL}, "value"),
+    State({"type": "bm-rank", "costume": ALL}, "id"),
+    State({"type": "bm-row", "costume": ALL}, "id"),
+)
+
 # --- 絆ランク管理: スクリーンショットの読み取り（画像はブラウザ内で処理） ---
 application.clientside_callback(
     ClientsideFunction("bond_ocr", "read"),
