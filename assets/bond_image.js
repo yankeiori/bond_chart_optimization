@@ -4,6 +4,7 @@
  *
  * 絆ランクを設定済みの衣装を、絆ランク10刻み（100, 99〜90, 89〜80, …, 19〜10, 9〜1）の
  * グループに分けて高い順に並べ、生徒画像の右下に絆ランクを重ねて canvas に描く。
+ * 見出しには衣装数・合計絆ランク・日付を書く。
  * グループは左端に範囲を書き、1行 _BOND_IMAGE_COLS 人を超えたら折り返す。
  * Dash の clientside_callback として登録される（main.py）。
  */
@@ -83,11 +84,12 @@ function _bondImage_draw(entries) {
     })));
     var rows = 0;
     groups.forEach(function (g) { rows += Math.ceil(g.entries.length / _BOND_IMAGE_COLS); });
-    // 見出し: 「絆ランク」・衣装数・日付
+    // 見出し: 「絆ランク」・衣装数・合計絆ランク・日付
     var d = new Date();
     var title = "絆ランク";
     var titleFont = "bold 18px " + _BOND_IMAGE_FONT;
-    var info = entries.length + " 衣装・" + d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate();
+    var total = entries.reduce(function (sum, e) { return sum + e.rank; }, 0);
+    var info = entries.length + " 衣装・合計 " + total + "・" + d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate();
     var infoFont = "12px " + _BOND_IMAGE_FONT;
     // 衣装が少なく幅が狭いと見出しと衣装数・日付が重なるため、両方が収まる幅は確保する
     var mctx = document.createElement("canvas").getContext("2d");
