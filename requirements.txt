@@ -71,7 +71,7 @@ setuptools==82.0.1
     # via dash
 typing-extensions==4.15.0
     # via dash
-urllib3==2.6.3
+urllib3==2.8.0
     # via requests
 werkzeug==3.1.8
     # via
