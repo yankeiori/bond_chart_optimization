@@ -37,6 +37,7 @@ else:
 
 _MANUAL_MD = (_BASE_DIR / "docs" / "manual.md").read_text(encoding="utf-8")
 _PRIVACY_MD = (_BASE_DIR / "docs" / "privacy.md").read_text(encoding="utf-8")
+_ABOUT_MD = (_BASE_DIR / "docs" / "about.md").read_text(encoding="utf-8")
 
 # 絆ランク管理との連携ボタン（反映 / 保存）を置く className
 BOND_RANKS_BTN_CLASS = "btn btn-sm"
@@ -332,7 +333,8 @@ def _make_bond_rank_input(
 
 
 def _footer() -> html.Div:
-    """全ページ共通フッター。報告先とプライバシーポリシーへのリンクを置く。"""
+    """全ページ共通フッター。報告先と、非公式である旨・このサイトについて・
+    プライバシーポリシーへのリンクを置く。"""
     return html.Div(
         [
             html.Span(
@@ -356,14 +358,16 @@ def _footer() -> html.Div:
                     "まで",
                 ]
             ),
+            html.Span("本サイトは非公式のファンツールです"),
+            dcc.Link("このサイトについて", href="/about", className="link"),
             dcc.Link("プライバシーポリシー", href="/privacy", className="link"),
         ],
         className="site-footer",
     )
 
 
-def create_privacy_layout() -> html.Div:
-    """プライバシーポリシー表示ページ。"""
+def _markdown_page(markdown: str) -> html.Div:
+    """docs/ の Markdown をそのまま表示するページ（フッターからのみ開く）。"""
     return html.Div(
         [
             html.Div(
@@ -381,7 +385,7 @@ def create_privacy_layout() -> html.Div:
                 style={"marginBottom": "16px"},
             ),
             dcc.Markdown(
-                _PRIVACY_MD,
+                markdown,
                 style={
                     "background": "#fff",
                     "padding": "24px",
@@ -398,6 +402,16 @@ def create_privacy_layout() -> html.Div:
             "padding": "0 20px",
         },
     )
+
+
+def create_privacy_layout() -> html.Div:
+    """プライバシーポリシー表示ページ。"""
+    return _markdown_page(_PRIVACY_MD)
+
+
+def create_about_layout() -> html.Div:
+    """このサイトについて（非公式である旨・権利表記・免責事項）。"""
+    return _markdown_page(_ABOUT_MD)
 
 
 # タブのカテゴリ（見出し, [パス, ...]）。ラベルは PAGES のもの。
@@ -1695,6 +1709,7 @@ PAGES = {
 # 主要ページ以外のページ（フッター等からのみアクセス）。
 EXTRA_PAGES = {
     "/privacy": ("プライバシーポリシー", create_privacy_layout),
+    "/about": ("このサイトについて", create_about_layout),
 }
 
 # 旧ルート互換 / ルートからのリダイレクト先。

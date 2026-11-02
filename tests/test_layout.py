@@ -243,6 +243,22 @@ class TestSiteHeader:
         _, builder = {**PAGES, **EXTRA_PAGES}[path]
         assert "schaledb" not in str(builder()).lower()
 
+    @pytest.mark.parametrize("path", list({**PAGES, **EXTRA_PAGES}.keys()))
+    def test_pages_have_unofficial_footer(self, path):
+        # 全ページのフッターに非公式である旨と「このサイトについて」へのリンク
+        _, builder = {**PAGES, **EXTRA_PAGES}[path]
+        footer = _find_by_class(builder(), "site-footer")
+        assert len(footer) == 1
+        assert "非公式" in str(footer[0])
+        assert "/about" in str(footer[0])
+
+    def test_about_page_has_rights_notice(self):
+        _, builder = EXTRA_PAGES["/about"]
+        text = str(builder())
+        assert "非公式" in text
+        assert "株式会社NEXON Games" in text
+        assert "株式会社Yostar" in text
+
 
 # ---------------------------------------------------------------------------
 # make_student_card
