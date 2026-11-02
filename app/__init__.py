@@ -90,3 +90,10 @@ server.config.update(
 # https・公開ホスト名で組み立てるため X-Forwarded-Proto / Host を信頼する。
 if "PORT" in os.environ:
     server.wsgi_app = ProxyFix(server.wsgi_app, x_proto=1, x_host=1)
+
+
+# Render の Health Check Path 用。DB が一時的に落ちてもアプリの再起動や
+# デプロイ失敗につながらないよう、DB には触れずにプロセスの応答だけを返す。
+@server.route("/healthz")
+def healthz():
+    return "ok", 200, {"Cache-Control": "no-store"}
