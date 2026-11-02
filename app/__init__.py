@@ -12,14 +12,54 @@ if getattr(sys, "frozen", False):
 else:
     _BASE_DIR = Path(__file__).resolve().parent.parent
 
+SITE_NAME = "絆上げ計算機"
+SITE_URL = "https://bond-chart-optimization.onrender.com/"
+SITE_DESCRIPTION = (
+    "ブルーアーカイブの絆上げを支援する無料ツール集。複数衣装の絆上げ優先度計算、"
+    "贈り物の配分シミュレーション、必要絆経験値、贈り物逆引き、製造ノード比較、"
+    "絆ランク管理を提供します。"
+)
+
+# リンク共有時のプレビュー（X 等のクローラーは JavaScript を実行しない）と
+# 検索結果の説明文のため、description と OGP は HTML に直接埋め込む。
 app = Dash(
     __name__,
     assets_folder=str(_BASE_DIR / "assets"),
     suppress_callback_exceptions=True,
-    title="絆上げ優先度計算機",
+    title=SITE_NAME,
     update_title=None,
-    meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1"},
+        {"name": "description", "content": SITE_DESCRIPTION},
+        {"property": "og:type", "content": "website"},
+        {"property": "og:url", "content": SITE_URL},
+        {"property": "og:site_name", "content": SITE_NAME},
+        {"property": "og:title", "content": SITE_NAME},
+        {"property": "og:description", "content": SITE_DESCRIPTION},
+        {"property": "og:locale", "content": "ja_JP"},
+        {"name": "twitter:card", "content": "summary"},
+    ],
 )
+
+# Dash 既定のテンプレートに lang="ja" と、JavaScript 無効時の案内を足したもの。
+app.index_string = """<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+    </head>
+    <body>
+        <noscript>このサイトの利用には JavaScript を有効にしてください。</noscript>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>"""
 
 server = app.server
 

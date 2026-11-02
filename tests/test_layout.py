@@ -392,3 +392,37 @@ class TestPresetsIntegration:
             inp = _make_bond_rank_input(i, costume_name=s["costume_name"])
             labels = _find_by_id(inp, {"type": "bond-rank-label", "index": i})
             assert labels[0].children == s["costume_name"]
+
+
+# ---------------------------------------------------------------------------
+# HTML の雛形（index_string）
+# ---------------------------------------------------------------------------
+
+
+class TestIndexHtml:
+    """JavaScript を実行しないクローラーや読み上げソフト向けの HTML を検証する。"""
+
+    @pytest.fixture(scope="class")
+    def html(self):
+        from app import app
+
+        with app.server.test_request_context("/chart-opt"):
+            return app.index()
+
+    def test_lang_is_japanese(self, html):
+        assert '<html lang="ja">' in html
+
+    def test_has_description(self, html):
+        assert '<meta name="description"' in html
+
+    @pytest.mark.parametrize(
+        "prop", ["og:type", "og:url", "og:site_name", "og:title", "og:description"]
+    )
+    def test_has_ogp(self, html, prop):
+        assert f'property="{prop}"' in html
+
+    def test_has_noscript_notice(self, html):
+        assert "<noscript>" in html
+
+    def test_does_not_mention_schaledb(self, html):
+        assert "schaledb" not in html.lower()
