@@ -55,7 +55,7 @@ packaging==26.3
     # via
     #   gunicorn
     #   plotly
-plotly==6.6.0
+plotly==7.1.0
     # via
     #   bond-chart-optimization
     #   dash
