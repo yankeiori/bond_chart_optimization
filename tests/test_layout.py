@@ -3,6 +3,9 @@
 ブラウザ不要でDashコンポーネントの構造・属性を検証する。
 """
 
+import re
+from pathlib import Path
+
 import pytest
 
 from app.backend.presets import PRESETS
@@ -420,6 +423,17 @@ class TestIndexHtml:
     )
     def test_has_ogp(self, html, prop):
         assert f'property="{prop}"' in html
+
+    def test_og_image_exists(self, html):
+        from app import SITE_URL
+
+        m = re.search(r'property="og:image" content="([^"]+)"', html)
+        assert m and m.group(1).startswith(SITE_URL)
+        assert (
+            Path(__file__).parent.parent
+            / "assets"
+            / m.group(1).removeprefix(SITE_URL + "assets/")
+        ).is_file()
 
     def test_has_noscript_notice(self, html):
         assert "<noscript>" in html

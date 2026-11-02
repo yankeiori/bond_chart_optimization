@@ -36,8 +36,12 @@ app = Dash(
         {"property": "og:site_name", "content": SITE_NAME},
         {"property": "og:title", "content": SITE_NAME},
         {"property": "og:description", "content": SITE_DESCRIPTION},
+        {"property": "og:image", "content": SITE_URL + "assets/og-image.png"},
+        {"property": "og:image:width", "content": "1200"},
+        {"property": "og:image:height", "content": "630"},
+        {"property": "og:image:alt", "content": SITE_NAME},
         {"property": "og:locale", "content": "ja_JP"},
-        {"name": "twitter:card", "content": "summary"},
+        {"name": "twitter:card", "content": "summary_large_image"},
     ],
 )
 
