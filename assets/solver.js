@@ -163,7 +163,6 @@ function _solver_solveSidney(currentRanks, allBondBonuses, priorityMap, bond50Pe
         }
     }
 
-    console.debug("[Sidney] goal score:", totalScore);
     return { path: path, totalScore: totalScore, cumPerCostume: cumPerCostume };
 }
 

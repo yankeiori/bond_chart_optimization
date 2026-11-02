@@ -3,6 +3,7 @@ from pathlib import Path
 
 from dash import html, dcc
 
+from app import SITE_NAME
 from app.backend.accounts import (
     current_user,
     enabled_providers,
@@ -398,8 +399,6 @@ def create_privacy_layout() -> html.Div:
         },
     )
 
-
-SITE_TITLE = "絆上げ優先度計算機"
 
 # タブのカテゴリ（見出し, [パス, ...]）。ラベルは PAGES のもの。
 NAV_GROUPS = [
@@ -1714,7 +1713,7 @@ def create_root_layout() -> html.Div:
             html.Div(
                 html.Div(
                     [
-                        html.H1(SITE_TITLE, className="site-title"),
+                        html.H1(SITE_NAME, className="site-title"),
                         _header_account(),
                     ],
                     className="site-header",
