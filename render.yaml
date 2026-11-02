@@ -2,8 +2,10 @@ services:
   - type: web
     name: bond-chart-optimization
     runtime: python
+    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn main:server -b 0.0.0.0:$PORT --workers 1 --threads 2 --preload
+    healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
