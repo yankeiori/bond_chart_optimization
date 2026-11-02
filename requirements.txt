@@ -73,7 +73,7 @@ typing-extensions==4.15.0
     # via dash
 urllib3==2.6.3
     # via requests
-werkzeug==3.1.8
+werkzeug==3.1.9
     # via
     #   dash
     #   flask
