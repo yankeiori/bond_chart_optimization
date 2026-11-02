@@ -287,6 +287,16 @@ _STYLE = """
   .gift-card:has(.tier-opt:not(.tier-opt-none) input:checked) {
     background: #fffceb; }
   .gift-card-name { font-size: 0.85rem; display: flex; align-items: center; }
+  .gift-ocr { background: #fff; border-radius: 6px; padding: 10px 12px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin: 8px 0 12px; }
+  .gift-ocr-result:empty { display: none; }
+  .gift-ocr-result { margin-top: 8px; font-size: 0.85rem; line-height: 1.6; }
+  .gift-ocr-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+  .gift-ocr-item { display: flex; align-items: center; gap: 6px;
+                   border: 1px solid #e67e22; border-radius: 4px; padding: 4px 6px; }
+  .gift-ocr-item img { width: 48px; display: block; }
+  .gift-ocr-uncertain, tr.gift-ocr-uncertain td { background: #fdebd0 !important; }
+  .gift-ocr-uncertain { outline: 2px solid #e67e22; }
   .furn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
   .furn-name { width: 280px; max-width: 100%; }
   .furn-id { width: 140px !important; text-align: left !important; }
@@ -782,6 +792,41 @@ def _present_gifts() -> list[dict]:
     ]
 
 
+def _gift_ocr_panel() -> str:
+    """好みの贈り物のスクリーンショット読み取り欄（assets/admin_gift_ocr.js）。
+
+    読み取った好みはページの好みのラジオ (name="g_<贈り物ID>") に入る。
+    照合には花束など好みのラジオが無い贈り物も要るので、選択ボックス以外の
+    全贈り物を渡す。画像はブラウザ内で読み、サーバーへは送らない。
+    """
+    gifts = [
+        {
+            "id": g["id"],
+            "name": g["name"],
+            "type": g["gift_type"],
+            "src": gift_image_src(g),
+        }
+        for g in load_gifts()
+        if g["id"] != _GIFT_SELECT_BOX_ID
+    ]
+    gifts_json = json.dumps(gifts, ensure_ascii=False).replace("<", "\\u003c")
+    return f"""<div class="gift-ocr">
+      <label>スクリーンショットから読み取る:
+        <input type="file" id="gift-ocr-file" accept="image/*" multiple></label>
+      <div class="summary" style="margin:6px 0 0">
+        生徒のプロフィールの「好みの贈り物」を開き、一覧を上から下までスクロール
+        しながら撮った画像をまとめて選んでください（前の画像と少し重なるように）。
+        画像はこのブラウザの中で読み取り、サーバーへは送りません。</div>
+      <div class="gift-ocr-result" id="gift-ocr-result"></div>
+    </div>
+    <script src="/assets/admin_gift_ocr.js"></script>
+    <script>
+    document.getElementById('gift-ocr-file').addEventListener('change', function () {{
+      giftOcrRead(this, document.getElementById('gift-ocr-result'), {gifts_json});
+    }});
+    </script>"""
+
+
 def _costume_label(c: dict) -> str:
     name = c["costume_name"] or "（標準）"
     star = f" ★{c['present_count']}" if c["present_count"] else ""
@@ -891,6 +936,7 @@ def _present_editor(costume_id: int) -> str:
     <div class="summary">「なし」のままの贈り物は present から削除されます。
       tier は EXP 計算に影響します（中=favorite / 大=superFavorite /
       特大=ultraFavorite）。</div>
+    {_gift_ocr_panel()}
     <form method="post" action="/admin/presents/save">
       <input type="hidden" name="costume_id" value="{costume_id}">
       <table>
@@ -1265,6 +1311,7 @@ def _render_add_page(
 
       <h2 id="sec-gift">3. 好み</h2>
       <div class="summary">好みの贈り物だけ選んでください（<span id="gift-count">0</span> 件選択中）。</div>
+      {_gift_ocr_panel()}
       {_add_gift_grid(form)}
 
       <h2 id="sec-furniture">4. モーション家具（あれば）</h2>
