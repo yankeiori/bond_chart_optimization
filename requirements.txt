@@ -28,7 +28,7 @@ gunicorn==25.3.0
     # via bond-chart-optimization
 idna==3.20
     # via requests
-importlib-metadata==9.0.0
+importlib-metadata==10.1.0
     # via dash
 itsdangerous==2.2.0
     # via flask
