@@ -1057,11 +1057,12 @@ def _gs_result_table(
 
 
 def _gs_parse_current_ranks(
-    rank_values, rank_ids, n: int, default: int = 20
+    rank_values, rank_ids, n: int, default: int = 20, max_rank: int = 50
 ) -> list[int]:
     """現在の絆ランク入力を衣装 index 順のリストにする（不正値は default）。
 
-    絆ボーナスは 50 までなので、51 以上は 50 として扱う。
+    絆ボーナスは 50 までなので、既定では 51 以上は 50 として扱う。
+    必要絆経験値ページは max_rank=MAX_RANK（絆100）で使う。
     """
     rank_by_idx = {rid["index"]: rv for rv, rid in zip(rank_values, rank_ids)}
     current_ranks = []
@@ -1071,7 +1072,7 @@ def _gs_parse_current_ranks(
             v = int(v)
         except (TypeError, ValueError):
             v = default
-        current_ranks.append(min(50, max(1, v)))
+        current_ranks.append(min(max_rank, max(1, v)))
     return current_ranks
 
 
@@ -1418,7 +1419,7 @@ def _rb_costume_rows(entries: list[dict], ranks=None, remains=None, targets=None
                         id={"type": "rb-bond-target", "index": i},
                         type="number",
                         min=1,
-                        max=50,
+                        max=MAX_RANK,
                         value=targets.get(i, _RB_DEFAULT_TARGET_RANK),
                         debounce=True,
                     ),
@@ -1755,11 +1756,11 @@ def rb_calculate(
 
     n = len(entries)
     current_ranks = _gs_parse_current_ranks(
-        rank_values, rank_ids, n, default=_RB_DEFAULT_CURRENT_RANK
+        rank_values, rank_ids, n, default=_RB_DEFAULT_CURRENT_RANK, max_rank=MAX_RANK
     )
     remaining_exp = _gs_parse_remaining_exp(remain_values, remain_ids, n)
     target_ranks = _gs_parse_current_ranks(
-        target_values, target_ids, n, default=_RB_DEFAULT_TARGET_RANK
+        target_values, target_ids, n, default=_RB_DEFAULT_TARGET_RANK, max_rank=MAX_RANK
     )
     # 並び順がそのまま優先順位（上の行 = 順位1 が最優先）
     priorities = list(range(1, n + 1))

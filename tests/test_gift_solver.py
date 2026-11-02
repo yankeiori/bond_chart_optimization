@@ -46,8 +46,18 @@ class TestExpToReachRank:
         assert exp_to_reach_rank(1, 2, remaining_exp=0) == 15
         assert exp_to_reach_rank(1, 2, remaining_exp=None) == 15
 
-    def test_target_capped_at_50(self):
-        assert exp_to_reach_rank(49, 60) == exp_to_reach_rank(49, 50)
+    def test_beyond_50(self):
+        # 49 -> 51 は 1740 + 1815
+        assert exp_to_reach_rank(49, 51) == 3555
+        assert exp_to_reach_rank(60, 61) == 2625
+        assert exp_to_reach_rank(99, 100) == 7215
+
+    def test_full_1_to_100(self):
+        assert exp_to_reach_rank(1, 100) == 240225
+
+    def test_target_capped_at_100(self):
+        assert exp_to_reach_rank(99, 120) == exp_to_reach_rank(99, 100)
+        assert exp_to_reach_rank(100, 120) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +349,21 @@ class TestSolveRequiredBoxesRankTarget:
         assert result["status"] == "optimal"
         assert result["total_boxes"] == 4
         assert sum(result["allocation"][0]) == 2
+
+    def test_target_beyond_50(self):
+        # 49 -> 51 に 1740 + 1815 = 3555 EXP -> ceil(3555/80) = 45個
+        result = _solve([49], [BONUS_FIRST], [80], target_ranks=[51])
+        assert result["status"] == "optimal"
+        assert result["total_boxes"] == 45
+        assert result["final_ranks"] == [51]
+        assert result["total_gain"] == 0
+
+    def test_current_beyond_50(self):
+        # 99 -> 100 に 7215 EXP -> ceil(7215/80) = 91個
+        result = _solve([99], [BONUS_FIRST], [80], target_ranks=[100])
+        assert result["status"] == "optimal"
+        assert result["total_boxes"] == 91
+        assert result["final_ranks"] == [100]
 
     def test_shared_gift_goes_to_one_costume(self):
         # 両衣装とも 1 -> 2 (15 EXP)。所持 15 EXP ×1 は片方にしか使えず、
