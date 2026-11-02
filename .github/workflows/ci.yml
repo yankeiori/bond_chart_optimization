@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main, develop]
   pull_request:
-    branches: [master]
+    branches: [main, develop]
 
 jobs:
   lint:
@@ -27,6 +27,12 @@ jobs:
 
       - name: Ruff format check
         run: uv run ruff format --check .
+
+      # Render は requirements.txt でインストールするため uv.lock とずれていないか確認する
+      - name: requirements.txt sync check
+        run: |
+          uv export --no-dev --no-hashes -o requirements.txt
+          git diff --exit-code requirements.txt
 
   test:
     runs-on: ubuntu-latest
