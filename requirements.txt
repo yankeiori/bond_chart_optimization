@@ -89,5 +89,5 @@ werkzeug==3.1.9
     # via
     #   dash
     #   flask
-zipp==3.23.0
+zipp==4.1.2
     # via importlib-metadata
