@@ -19,6 +19,9 @@ from app.backend.bond_exp import BOND_EXP_PER_LEVEL
 from app.backend.student import BOND_RANGES
 
 _MAX_RANK = 50
+# 必要EXPテーブルの上限（絆100）。絆51以降は絆ボーナスがなく、目標絆ランク
+# までの必要EXPを求めるとき（exp_to_reach_rank / solve_required_boxes）だけ使う。
+_MAX_EXP_RANK = len(BOND_EXP_PER_LEVEL) + 1
 
 # SCIP の制限時間（秒）。実データ規模では数ミリ秒で解けるが、
 # 想定外の重い入力で UI が固まらないための保険。
@@ -35,18 +38,20 @@ def _range_bonus(bond_bonuses: list[int], rank: int) -> int:
 
 
 def _level_exp(rank: int) -> int:
-    """(rank-1) -> rank に必要な EXP。rank は 2..50。"""
+    """(rank-1) -> rank に必要な EXP。rank は 2..100。"""
     return BOND_EXP_PER_LEVEL[rank - 2]
 
 
-def _rankup_costs(current_rank: int, remaining_exp) -> dict[int, int]:
-    """current_rank から 50 までの各ランクアップ必要 EXP。
+def _rankup_costs(
+    current_rank: int, remaining_exp, max_rank: int = _MAX_RANK
+) -> dict[int, int]:
+    """current_rank から max_rank（既定 50）までの各ランクアップ必要 EXP。
 
     最初の (current_rank -> current_rank+1) のみ remaining_exp（次の絆上昇
     までの残り経験値）で上書きできる。None・0以下は満額。[1, 満額] にクランプ。
     """
     cost = {}
-    for r in range(current_rank + 1, _MAX_RANK + 1):
+    for r in range(current_rank + 1, max_rank + 1):
         base = _level_exp(r)
         if (
             r == current_rank + 1
@@ -61,15 +66,15 @@ def _rankup_costs(current_rank: int, remaining_exp) -> dict[int, int]:
 def exp_to_reach_rank(current_rank: int, target_rank: int, remaining_exp=None) -> int:
     """current_rank から target_rank に上げるのに必要な EXP 合計。
 
-    target_rank <= current_rank なら 0。remaining_exp の扱いは
-    solve_gift_distribution と同じ（最初のランクアップのみ上書き）。
+    target_rank <= current_rank なら 0。target_rank は絆100が上限。
+    remaining_exp の扱いは solve_gift_distribution と同じ（最初の
+    ランクアップのみ上書き）。
     """
+    target_rank = min(target_rank, _MAX_EXP_RANK)
     if target_rank <= current_rank:
         return 0
-    cost = _rankup_costs(current_rank, remaining_exp)
-    return sum(
-        cost[r] for r in range(current_rank + 1, min(target_rank, _MAX_RANK) + 1)
-    )
+    cost = _rankup_costs(current_rank, remaining_exp, target_rank)
+    return sum(cost.values())
 
 
 def boxes_to_reach_rank(
@@ -423,6 +428,7 @@ def solve_required_boxes(
     # y[c]: 追加ボックス数。delta[c][r]: ランク到達（目標ランクまでは lb=1 で強制）
     y = {}
     delta = {}
+    top = {}
     for c in range(n):
         r0 = current_ranks[c]
         rem = (
@@ -430,22 +436,22 @@ def solve_required_boxes(
             if remaining_exp is not None and c < len(remaining_exp)
             else None
         )
-        costs = _rankup_costs(r0, rem)
-        # 絆50到達分を超えるボックスは無意味なので上限にする
+        forced_to = target_ranks[c]
+        forced_to = min(int(forced_to), _MAX_EXP_RANK) if forced_to is not None else r0
+        # 絆ボーナスは絆50まで。目標が絆51以上ならその目標までランクを持つ
+        top[c] = max(_MAX_RANK, forced_to)
+        costs = _rankup_costs(r0, rem, top[c])
+        # top 到達分を超えるボックスは無意味なので上限にする
         v = int(box_values[c])
         ub = 0 if v <= 0 else -(-sum(costs.values()) // v)
         y[c] = model.addVar(vtype="I", lb=0, ub=ub, name=f"y_{c}")
 
-        forced_to = target_ranks[c]
-        forced_to = min(int(forced_to), _MAX_RANK) if forced_to is not None else r0
-        for r in range(r0 + 1, _MAX_RANK + 1):
+        for r in range(r0 + 1, top[c] + 1):
             lb = 1 if r <= forced_to else 0
             delta[c, r] = model.addVar(vtype="B", lb=lb, name=f"d_{c}_{r}")
-        for r in range(r0 + 2, _MAX_RANK + 1):
+        for r in range(r0 + 2, top[c] + 1):
             model.addCons(delta[c, r] <= delta[c, r - 1])
-        consumed = quicksum(
-            costs[r] * delta[c, r] for r in range(r0 + 1, _MAX_RANK + 1)
-        )
+        consumed = quicksum(costs[r] * delta[c, r] for r in range(r0 + 1, top[c] + 1))
         gained = quicksum(value[g][c] * x[g, c] for g in range(m))
         model.addCons(consumed <= gained + v * y[c])
 
@@ -475,7 +481,7 @@ def solve_required_boxes(
             r0 = current_ranks[c]
             cnt = sum(
                 1
-                for r in range(r0 + 1, _MAX_RANK + 1)
+                for r in range(r0 + 1, top[c] + 1)
                 if model.getSolVal(sol, delta[c, r]) > 0.5
             )
             fr.append(r0 + cnt)

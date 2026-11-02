@@ -203,6 +203,15 @@ class TestGsParseCurrentRanks:
         ids = [{"index": i} for i in range(4)]
         assert _gs_parse_current_ranks([51, 100, None, 0], ids, 4) == [50, 50, 20, 1]
 
+    def test_max_rank_100(self):
+        # 必要絆経験値ページは絆100まで受け付ける
+        ids = [{"index": i} for i in range(3)]
+        assert _gs_parse_current_ranks([51, 100, 120], ids, 3, max_rank=100) == [
+            51,
+            100,
+            100,
+        ]
+
 
 class TestGsCostumeRows:
     COSTUMES = [
