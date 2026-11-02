@@ -440,14 +440,11 @@ wheels = [
 
 [[package]]
 name = "gunicorn"
-version = "25.3.0"
+version = "26.2.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/f4/e78fa054248fab913e2eab0332c6c2cb07421fca1ce56d8fe43b6aef57a4/gunicorn-25.3.0.tar.gz", hash = "sha256:f74e1b2f9f76f6cd1ca01198968bd2dd65830edc24b6e8e4d78de8320e2fe889", size = 634883, upload-time = "2026-03-27T00:00:26.092Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d9/8a/e4ef6ee11701b6cd64702848415ffb69eeff85cb388a3c6c7fe86f22f3f8/gunicorn-26.2.0.tar.gz", hash = "sha256:62b864895d9ebff0b2f9867ba04fe811c93121596540830c9c916d0769668447", size = 787921, upload-time = "2026-08-24T15:05:59.3Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/c8/8aaf447698c4d59aa853fd318eed300b5c9e44459f242ab8ead6c9c09792/gunicorn-25.3.0-py3-none-any.whl", hash = "sha256:cacea387dab08cd6776501621c295a904fe8e3b7aae9a1a3cbb26f4e7ed54660", size = 208403, upload-time = "2026-03-27T00:00:27.386Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/85/7522a52e5e2f42faf1a129113ab63e548c42e103e9af395b7bfe65e403e2/gunicorn-26.2.0-py3-none-any.whl", hash = "sha256:bd249d0b3f7972f7432f0a6b6ff3b3ee2d129f70cd1ff6c09a9dd9e29a2b88e3", size = 228389, upload-time = "2026-08-24T15:05:57.67Z" },
 ]
 
 [[package]]
@@ -461,14 +458,14 @@ wheels = [
 
 [[package]]
 name = "importlib-metadata"
-version = "9.0.0"
+version = "10.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "zipp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/01/15bb152d77b21318514a96f43af312635eb2500c96b55398d020c93d86ea/importlib_metadata-9.0.0.tar.gz", hash = "sha256:a4f57ab599e6a2e3016d7595cfd72eb4661a5106e787a95bcc90c7105b831efc", size = 56405, upload-time = "2026-03-20T06:42:56.999Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/f6/4eda8458eb00ec03e715c376c6b23b3def69687924c68d36d1c4003d3bc4/importlib_metadata-10.1.0.tar.gz", hash = "sha256:82b04047fa09792c1a8cfeddfe08bec79e4b13c29c8469b0d3949860f61017e8", size = 67761, upload-time = "2026-10-24T00:01:44.856Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/3d/2d244233ac4f76e38533cfcb2991c9eb4c7bf688ae0a036d30725b8faafe/importlib_metadata-9.0.0-py3-none-any.whl", hash = "sha256:2d21d1cc5a017bd0559e36150c21c830ab1dc304dedd1b7ea85d20f45ef3edd7", size = 27789, upload-time = "2026-03-20T06:42:55.665Z" },
+    { url = "https://files.pythonhosted.org/packages/65/b6/495438ad95e0102aff8f6786b5474202f38cd5d4700d03a72b77977dec10/importlib_metadata-10.1.0-py3-none-any.whl", hash = "sha256:cf45ce66a929c64e994185a809c04840d0501db17e663810d993d0f4829265c7", size = 32221, upload-time = "2026-10-24T00:01:43.507Z" },
 ]
 
 [[package]]
@@ -758,15 +755,15 @@ wheels = [
 
 [[package]]
 name = "plotly"
-version = "6.6.0"
+version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "narwhals" },
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/fb/41efe84970cfddefd4ccf025e2cbfafe780004555f583e93dba3dac2cdef/plotly-6.6.0.tar.gz", hash = "sha256:b897f15f3b02028d69f755f236be890ba950d0a42d7dfc619b44e2d8cea8748c", size = 7027956, upload-time = "2026-03-02T21:10:25.321Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/c3/72b369f5ed7701b04ab0ea3dcf83e9bbce71c0b3bc6f07f87568550d09ea/plotly-7.1.0.tar.gz", hash = "sha256:f860166a4a3d78c69cb1f4a15f28a5c8283eade98a282a698f3bb853a449ace5", size = 6689315, upload-time = "2026-09-15T19:21:21.75Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/d2/c6e44dba74f17c6216ce1b56044a9b93a929f1c2d5bdaff892512b260f5e/plotly-6.6.0-py3-none-any.whl", hash = "sha256:8d6daf0f87412e0c0bfe72e809d615217ab57cc715899a1e5145135a7800d1d0", size = 9910315, upload-time = "2026-03-02T21:10:18.131Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/7d/905a3a3d51087515719058c94cfbda2ff0fc14417c20d557ae3e82d8b250/plotly-7.1.0-py3-none-any.whl", hash = "sha256:dbb7fa18afce40d0a8e80d1bf162eceb3faa0ce5a77fe741ad09a74cf78f53f3", size = 9692368, upload-time = "2026-09-15T19:21:18.331Z" },
 ]
 
 [[package]]
