@@ -25,6 +25,9 @@ SITE_DESCRIPTION = (
 app = Dash(
     __name__,
     assets_folder=str(_BASE_DIR / "assets"),
+    # 管理画面だけで使うスクリプト（admin_*.js）は公開ページで読み込まない
+    # （/assets/ からの配信はされる）
+    assets_ignore=r"^admin_",
     suppress_callback_exceptions=True,
     title=SITE_NAME,
     update_title=None,

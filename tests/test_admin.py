@@ -352,3 +352,70 @@ class TestAddPage:
     def test_post_requires_same_origin(self, add_client, monkeypatch):
         monkeypatch.setattr(admin, "admin_register_costume", lambda **kw: 1)
         assert add_client.post("/admin/add", data=_add_form()).status_code == 403
+
+
+# ----------------------------------------------------------------------
+# 好みのスクリーンショット読み取り（assets/admin_gift_ocr.js）
+# ----------------------------------------------------------------------
+
+_OCR_GIFTS = _GIFTS + [
+    {"id": "beautiful-bouquet", "name": "美しい花束", "gift_type": "high-all"},
+    {"id": "gift-select-box", "name": "贈り物選択ボックス", "gift_type": "normal"},
+]
+
+
+class TestGiftOcr:
+    @pytest.fixture
+    def ocr_client(self, client, monkeypatch):
+        _login_as(monkeypatch, _ADMIN)
+        monkeypatch.setattr(admin, "load_gifts", lambda: _OCR_GIFTS)
+        monkeypatch.setattr(admin, "admin_load_costumes", lambda: _COSTUMES)
+        monkeypatch.setattr(admin, "admin_load_presets", lambda: [])
+        monkeypatch.setattr(admin, "admin_load_priorities", lambda: [])
+        monkeypatch.setattr(admin, "admin_load_furniture_catalog", lambda: [])
+        return client
+
+    def test_panel_gifts(self, monkeypatch):
+        monkeypatch.setattr(admin, "load_gifts", lambda: _OCR_GIFTS)
+        html = admin._gift_ocr_panel()
+        assert '<script src="/assets/admin_gift_ocr.js"></script>' in html
+        # 照合には好みのラジオが無い花束も要る。選択ボックスはパネルに出ない
+        assert '"id": "beautiful-bouquet"' in html
+        assert '"type": "high-all"' in html
+        assert "gift-select-box" not in html
+        assert "/assets/gift/%E8%B4%88%E3%82%8A%E7%89%A9A.png" in html
+
+    def test_add_page_has_reader(self, ocr_client):
+        page = ocr_client.get("/admin/add").get_data(as_text=True)
+        assert 'id="gift-ocr-file"' in page
+        # 好みのラジオは花束に作らない（読み取りは贈り物のラジオにだけ入れる）
+        assert 'name="g_gift-a"' in page
+        assert 'name="g_beautiful-bouquet"' not in page
+
+    def test_presents_page_has_reader(self, ocr_client, monkeypatch):
+        monkeypatch.setattr(
+            admin,
+            "admin_load_costumes",
+            lambda: [{**c, "present_count": 0} for c in _COSTUMES],
+        )
+        monkeypatch.setattr(
+            admin,
+            "admin_get_costume",
+            lambda cid: {"student_name": "アル", "costume_name": "ドレス"},
+        )
+        monkeypatch.setattr(admin, "admin_load_present", lambda cid: {})
+        monkeypatch.setattr(admin, "admin_load_costume_furniture", lambda cid: [])
+        page = ocr_client.get("/admin/presents?costume_id=2").get_data(as_text=True)
+        assert 'id="gift-ocr-file"' in page
+        assert "schaledb" not in page.lower()
+
+    def test_not_loaded_on_public_pages(self, client):
+        # 管理画面用のスクリプトは公開ページに読み込まないが、配信はする
+        with app.server.test_request_context("/chart-opt"):
+            app._walk_assets_directory()
+            html = app.index()
+        assert "bond_ocr.js" in html
+        assert "admin_gift_ocr" not in html
+        res = client.get("/assets/admin_gift_ocr.js")
+        assert res.status_code == 200
+        res.close()
