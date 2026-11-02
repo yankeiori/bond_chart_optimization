@@ -67,7 +67,7 @@ requests==2.33.1
     # via dash
 retrying==1.4.2
     # via dash
-setuptools==82.0.1
+setuptools==84.2.1
     # via dash
 typing-extensions==4.15.0
     # via dash
