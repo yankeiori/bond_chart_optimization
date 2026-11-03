@@ -1659,6 +1659,7 @@ def create_bond_ranks_layout() -> html.Div:
                                             html.Span("衣装"),
                                             html.Span("絆ランク"),
                                             html.Span(),
+                                            html.Span(),
                                         ],
                                         className="costume-head bm-grid",
                                     )

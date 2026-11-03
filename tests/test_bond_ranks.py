@@ -155,9 +155,10 @@ class TestBmRows:
         options = [{"value": 1, "label": "ホシノ"}, {"value": 2, "label": "ノア"}]
         rows = _bm_rows(data, options)
         assert [r.children[0].children[-1] for r in rows] == ["ホシノ", "ノア"]
-        assert [len(r.children) for r in rows] == [3, 3]  # 衣装 / 絆ランク / +1
+        assert [len(r.children) for r in rows] == [4, 4]  # 衣装 / 絆ランク / -1 / +1
         rank = [r.children[1] for r in rows]
-        assert rows[1].children[2].id == {"type": "bm-rank-inc", "costume": 2}
+        assert rows[1].children[2].id == {"type": "bm-rank-dec", "costume": 2}
+        assert rows[1].children[3].id == {"type": "bm-rank-inc", "costume": 2}
         assert rank[0].value is None  # 未設定
         assert rank[1].id == {"type": "bm-rank", "costume": 2}
         assert rank[1].value == 30
