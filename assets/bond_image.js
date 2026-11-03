@@ -5,7 +5,7 @@
  * 絆ランクを設定済みの衣装を、絆ランク10刻み（100, 99〜90, 89〜80, …, 19〜10, 9〜1）の
  * グループに分けて高い順に並べ、生徒画像の右下に絆ランクを重ねて canvas に描く。
  * 見出しには衣装数・合計絆ランク・日付を書く。
- * グループは左端に範囲を書き、1行 _BOND_IMAGE_COLS 人を超えたら折り返す。
+ * グループは左端に範囲とその人数を書き、1行 _BOND_IMAGE_COLS 人を超えたら折り返す。
  * Dash の clientside_callback として登録される（main.py）。
  */
 
@@ -134,11 +134,14 @@ function _bondImage_draw(entries) {
             ctx.lineTo(w - _BOND_IMAGE_PAD, ly);
             ctx.stroke();
         }
-        // グループの範囲（例: 99〜90。100 は単独）
+        // グループの範囲（例: 99〜90。100 は単独）と、その下に人数
         ctx.textAlign = "left";
         ctx.fillStyle = "#555";
         ctx.font = "bold 14px " + _BOND_IMAGE_FONT;
-        ctx.fillText(g.top === g.bottom ? String(g.top) : g.top + "〜" + Math.max(g.bottom, 1), _BOND_IMAGE_PAD, gy + _BOND_IMAGE_ICON_H / 2);
+        ctx.fillText(g.top === g.bottom ? String(g.top) : g.top + "〜" + Math.max(g.bottom, 1), _BOND_IMAGE_PAD, gy + _BOND_IMAGE_ICON_H / 2 - 9);
+        ctx.fillStyle = "#888";
+        ctx.font = "12px " + _BOND_IMAGE_FONT;
+        ctx.fillText("（" + g.entries.length + "人）", _BOND_IMAGE_PAD, gy + _BOND_IMAGE_ICON_H / 2 + 9);
         g.entries.forEach(function (e, i) {
             _bondImage_drawCell(
                 ctx, e,
