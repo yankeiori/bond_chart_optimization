@@ -114,8 +114,10 @@ body {
 .page-tabs {
     display: flex;
     align-items: flex-end;
-    gap: 16px;
+    gap: 12px;
     border-bottom: 2px solid var(--c-primary);
+    /* 狭い画面ではみ出す場合は横スクロール */
+    overflow-x: auto;
 }
 .tab-group {
     display: flex;
@@ -134,7 +136,7 @@ body {
     gap: 4px;
 }
 .page-tab {
-    padding: 8px 18px;
+    padding: 8px 12px;
     border: 1px solid var(--c-primary);
     border-bottom: none;
     border-radius: 8px 8px 0 0;
@@ -152,6 +154,12 @@ body {
 }
 .page-tab:not(.page-tab-active):hover {
     background: #d4e6f7;
+}
+@media (max-width: 1200px) {
+    .page-tab {
+        padding: 8px 10px;
+        font-size: 0.85rem;
+    }
 }
 
 /* 共通フッター */
@@ -451,9 +459,13 @@ details.panel[open] > summary {
 .co-grid {
     grid-template-columns: minmax(120px, 1.2fr) 80px minmax(0, 3fr);
 }
-/* 絆ランク管理: 衣装 / 絆ランク */
+/* 絆ランク管理: 衣装 / 絆ランク / +1 */
 .bm-grid {
-    grid-template-columns: minmax(0, 1fr) 76px;
+    grid-template-columns: minmax(0, 1fr) 76px 44px;
+}
+.bm-inc-btn {
+    width: 100%;
+    padding: 4px 0;
 }
 
 /* number input のスピナーボタンを非表示 */
@@ -977,7 +989,7 @@ input[type="number"] {
         gap: 4px;
     }
     .bm-grid {
-        grid-template-columns: minmax(0, 1fr) 64px;
+        grid-template-columns: minmax(0, 1fr) 64px 44px;
     }
     .co-grid {
         grid-template-columns: minmax(0, 1fr) 80px;
@@ -1138,7 +1150,7 @@ input[type="number"] {
    余りの見出しは高さ 0 の行に入れて隠す */
 .bm-rows,
 .bm-heads {
-    --bm-col-w: 250px;
+    --bm-col-w: 290px;
     --bm-col-gap: 32px;
 }
 .bm-rows {
@@ -1200,4 +1212,63 @@ input[type="number"] {
 .fav-btn {
     font-size: 1.1rem;
     padding: 2px 10px;
+}
+
+/* 絆ランク統計ページ */
+.bs-stat-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+}
+.bs-stat {
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: var(--c-soft-bg);
+    padding: 8px 10px;
+}
+.bs-stat-label,
+.bs-stat-sub {
+    color: var(--c-muted);
+    font-size: 0.75rem;
+}
+.bs-stat-value {
+    font-size: 1.25rem;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+}
+.bs-bin {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+}
+.bs-bin-label {
+    color: var(--c-muted);
+}
+.bs-hist-graph {
+    max-width: 760px;
+}
+.bs-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 4px 16px;
+}
+.bs-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--c-divider);
+    font-size: 0.85rem;
+}
+.bs-item-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.bs-item-value {
+    flex: none;
+    font-variant-numeric: tabular-nums;
 }

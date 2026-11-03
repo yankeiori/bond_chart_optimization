@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from urllib.parse import quote
 
+import plotly.graph_objects as go
 from dash import html, dcc, callback, Input, Output, State, ALL, ctx, no_update
 from dash.exceptions import PreventUpdate
 
@@ -49,8 +50,13 @@ from app.backend.gift_solver import (
     exp_to_reach_rank,
 )
 from app.backend.bond_ranks import (
+    BONUS_MAX_RANK,
     MAX_RANK,
+    MIN_RANK,
+    NEAR_RANKS,
+    TOP_COUNT,
     apply_page_edits,
+    bond_rank_stats,
     merge_ocr_cards,
     normalize_bond_ranks,
     ranks_for_costumes,
@@ -59,6 +65,8 @@ from app.backend.bond_ranks import (
 )
 from app.frontend.layout import (
     BOND_RANKS_BTN_CLASS,
+    empty_note,
+    panel,
     make_student_card,
     _make_bond_rank_input,
     _default_costume_name,
@@ -3121,6 +3129,15 @@ def _bm_rows(bond_ranks, options: list[dict]) -> list:
                         placeholder="未設定",
                         style=BM_ROW_RANK_STYLE,
                     ),
+                    # 絆ランクは基本1ずつ上がるので、押すだけで +1 できるようにする
+                    # （main.py の clientside_callback。未設定なら 1 にする）
+                    html.Button(
+                        "+1",
+                        id={"type": "bm-rank-inc", "costume": cid},
+                        n_clicks=0,
+                        className="btn btn-sm bm-inc-btn",
+                        title="絆ランクを1上げる",
+                    ),
                 ],
                 id={"type": "bm-row", "costume": cid},
                 className="costume-row bm-grid bm-row",
@@ -3214,6 +3231,247 @@ def bm_save_edits(rank_values, rank_ids, bond_ranks):
     if saved["costumes"] == normalize_bond_ranks(bond_ranks):
         return no_update, count
     return saved, count
+
+
+def _fmt_stat(value) -> str:
+    """平均・中央値の表示（小数1桁、整数ならそのまま、無ければ —）。"""
+    if value is None:
+        return "—"
+    return str(int(value)) if value == int(value) else f"{value:.1f}"
+
+
+def _bs_tile(label, value, sub=None) -> html.Div:
+    return html.Div(
+        [
+            html.Div(label, className="bs-stat-label"),
+            html.Div(value, className="bs-stat-value"),
+            sub and html.Div(sub, className="bs-stat-sub"),
+        ],
+        className="bs-stat",
+    )
+
+
+def _bs_costume_list(rows: list[dict], value) -> html.Div:
+    """生徒画像付きの衣装の一覧。value(row) を右に出す。"""
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(_with_student_icon(r["label"]), className="bs-item-name"),
+                    html.Span(value(r), className="bs-item-value"),
+                ],
+                className="bs-item",
+            )
+            for r in rows
+        ],
+        className="bs-list",
+    )
+
+
+# 絆ランクの分布の区切りの幅（選べる幅・初期値）
+BS_BIN_SIZES = (1, 5, 10)
+BS_BIN_DEFAULT = 10
+
+
+def _bs_hist_bins(ranks: list[int], size: int) -> list[dict]:
+    """幅 size の倍数で区切った絆ランクの区間ごとの衣装数（空の区間も含む）。
+
+    10ごとなら 1〜9, 10〜19, …, 90〜99, 100（絆ランク画像のグループと同じ）。
+    """
+    bins = []
+    for start in range(0, MAX_RANK + 1, size):
+        lo, hi = max(start, MIN_RANK), min(start + size - 1, MAX_RANK)
+        if lo > hi:  # 1ごとのときの 0
+            continue
+        bins.append(
+            {
+                "lo": lo,
+                "hi": hi,
+                "label": str(lo) if lo == hi else f"{lo}〜{hi}",
+                "count": sum(1 for r in ranks if lo <= r <= hi),
+            }
+        )
+    return bins
+
+
+def _bs_hist_figure(ranks: list[int], size: int) -> go.Figure:
+    """絆ランクの分布のヒストグラム（横軸 絆ランク・縦軸 衣装数）。
+
+    区間ごとに集計して棒の幅を区間の幅に合わせる（端の区間は 1〜9・100
+    のように短い）。横軸は 1〜100 に固定する。
+    """
+    bins = _bs_hist_bins(ranks, size)
+    fig = go.Figure(
+        go.Bar(
+            x=[(b["lo"] + b["hi"]) / 2 for b in bins],
+            y=[b["count"] for b in bins],
+            width=[b["hi"] - b["lo"] + 1 for b in bins],
+            customdata=[b["label"] for b in bins],
+            marker={"color": "#4a90d9", "line": {"color": "#fff", "width": 1}},
+            hovertemplate="絆ランク %{customdata}<br>%{y} 衣装<extra></extra>",
+        )
+    )
+    fig.add_vline(
+        x=BONUS_MAX_RANK - 0.5,
+        line={"color": "#9ca3af", "width": 1, "dash": "dot"},
+    )
+    fig.add_annotation(
+        x=BONUS_MAX_RANK - 0.5,
+        y=1,
+        yref="paper",
+        yanchor="bottom",
+        text=f"絆ボーナス上限（{BONUS_MAX_RANK}）",
+        showarrow=False,
+        font={"size": 11, "color": "#6b7280"},
+    )
+    fig.update_layout(
+        height=300,
+        margin={"l": 40, "r": 10, "t": 28, "b": 40},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"size": 12, "color": "#374151"},
+        dragmode=False,
+        hoverlabel={"font": {"size": 12}},
+    )
+    fig.update_xaxes(
+        title_text="絆ランク",
+        range=[MIN_RANK - 0.5, MAX_RANK + 0.5],
+        tickvals=[1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+        fixedrange=True,
+        showgrid=False,
+        linecolor="#d1d5db",
+    )
+    fig.update_yaxes(
+        title_text="衣装数",
+        rangemode="tozero",
+        fixedrange=True,
+        gridcolor="#eceff3",
+        tickformat="d",
+    )
+    return fig
+
+
+def _bs_render(bond_ranks, options: list[dict]):
+    """絆ランク統計ページの中身（まとめ・絆経験値・分布・あと少し・上位）。"""
+    st = bond_rank_stats(bond_ranks, options)
+    if not st["count"]:
+        return panel(
+            [
+                empty_note("絆ランクがまだ設定されていません。"),
+                dcc.Link("絆ランク管理で設定する", href="/bond-ranks"),
+            ]
+        )
+    pct = f"{st['count'] / st['costume_total']:.0%}" if st["costume_total"] else None
+    summary = html.Div(
+        [
+            _bs_tile("設定済みの衣装", f"{st['count']} / {st['costume_total']}", pct),
+            _bs_tile("設定済みの生徒", f"{st['students']} / {st['student_total']}"),
+            _bs_tile(
+                "平均絆ランク",
+                _fmt_stat(st["avg"]),
+                f"中央値 {_fmt_stat(st['median'])}",
+            ),
+            _bs_tile("合計絆ランク", f"{st['total']:,}"),
+            _bs_tile(
+                f"絆ランク {BONUS_MAX_RANK} 以上",
+                f"{st['bonus_max']} 衣装",
+                "絆ボーナスが上限",
+            ),
+            _bs_tile(f"絆ランク {MAX_RANK}", f"{st['max_rank']} 衣装"),
+        ],
+        className="bs-stat-tiles",
+    )
+    exp = html.Div(
+        [
+            _bs_tile("これまでに得た絆経験値", f"{st['exp_total']:,}"),
+            _bs_tile(
+                f"全員を絆ランク {BONUS_MAX_RANK} にするまで",
+                f"{st['exp_to_bonus_max']:,}",
+                f"絆ランク {BONUS_MAX_RANK} 未満の衣装の残り",
+            ),
+            _bs_tile(
+                f"全員を絆ランク {MAX_RANK} にするまで",
+                f"{st['exp_to_max']:,}",
+            ),
+        ],
+        className="bs-stat-tiles",
+    )
+    hist = [
+        html.Div(
+            [
+                html.Span("区切り", className="bs-bin-label"),
+                dcc.RadioItems(
+                    id="bs-bin-size",
+                    options=[{"label": f"{v}ごと", "value": v} for v in BS_BIN_SIZES],
+                    value=BS_BIN_DEFAULT,
+                    inline=True,
+                    persistence=True,
+                    className="picker-radio",
+                ),
+            ],
+            className="bs-bin",
+        ),
+        dcc.Graph(
+            id="bs-hist-graph",
+            figure=_bs_hist_figure(st["ranks"], BS_BIN_DEFAULT),
+            config={"displayModeBar": False},
+            className="bs-hist-graph",
+        ),
+        dcc.Store(id="bs-ranks", data=st["ranks"]),
+    ]
+    near = (
+        _bs_costume_list(
+            st["near"],
+            lambda r: f"{r['rank']} → {r['target']}（あと {r['exp']:,}）",
+        )
+        if st["near"]
+        else empty_note("該当する衣装はありません。")
+    )
+    top = _bs_costume_list(st["top"], lambda r: str(r["rank"]))
+    return [
+        panel(summary, title="まとめ"),
+        panel(
+            exp,
+            title="絆経験値",
+            hint="設定済みの衣装だけを数えます（未設定の衣装は含みません）。",
+        ),
+        panel(
+            hist,
+            title="絆ランクの分布",
+            hint="10ごとなら 1〜9・10〜19・…・90〜99・100 で区切ります。"
+            "棒にカーソルを合わせると衣装数が出ます。",
+        ),
+        panel(
+            near,
+            title="あと少しの衣装",
+            hint=f"絆ランク {BONUS_MAX_RANK}・{MAX_RANK} の{NEAR_RANKS}ランク手前までの"
+            "衣装を、必要な絆経験値の少ない順に並べます。",
+        ),
+        panel(top, title=f"絆ランクが高い衣装（上位 {TOP_COUNT}）"),
+    ]
+
+
+@callback(
+    Output("bs-content", "children"),
+    Input("bs-init", "n_intervals"),
+    Input("bond-ranks", "data"),
+    prevent_initial_call=True,
+)
+def bs_render(_n, bond_ranks):
+    """絆ランク統計ページを描く（保存データが変わったときも描き直す）。"""
+    return _bs_render(bond_ranks, get_costume_options())
+
+
+@callback(
+    Output("bs-hist-graph", "figure"),
+    Input("bs-bin-size", "value"),
+    State("bs-ranks", "data"),
+)
+def bs_bin_size(size, ranks):
+    """区切りの幅を変えたら、ヒストグラムを描き直す。"""
+    if size not in BS_BIN_SIZES or not isinstance(ranks, list):
+        raise PreventUpdate
+    return _bs_hist_figure(ranks, size)
 
 
 def _bm_ocr_preview(result, bond_ranks, options: list[dict]):

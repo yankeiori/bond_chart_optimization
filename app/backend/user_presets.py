@@ -418,6 +418,7 @@ def _load_costume_options() -> list[dict]:
             "label": _costume_label(r[1], r[2]),
             "value": r[0],
             "search": _search_text(f"{r[1]} {r[2]}"),
+            "student": r[1],
         }
         for r in rows
     ]

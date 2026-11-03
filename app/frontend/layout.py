@@ -418,7 +418,7 @@ def create_about_layout() -> html.Div:
 NAV_GROUPS = [
     ("計算ツール", ["/chart-opt", "/gift-simulation", "/required-exp"]),
     ("調べる", ["/gift-lookup", "/node-compare", "/furniture-node"]),
-    ("マイデータ", ["/bond-ranks"]),
+    ("マイデータ", ["/bond-ranks", "/bond-stats"]),
 ]
 
 
@@ -1597,6 +1597,7 @@ def create_bond_ranks_layout() -> html.Div:
                 "「Google でログイン」からログインするとサーバーに保存され、他の端末・"
                 "ブラウザでも使えます（初回ログイン時はこのブラウザの内容を引き継ぎます）。"
                 "保存するのは Google のユーザーIDのみで、メールアドレスや名前は保存しません。",
+                actions=dcc.Link("統計を見る", href="/bond-stats", className="btn"),
             ),
             # ログイン失敗などの通知（あるときだけ）
             auth_error and html.P(auth_error, className="auth-error"),
@@ -1654,7 +1655,11 @@ def create_bond_ranks_layout() -> html.Div:
                             html.Div(
                                 [
                                     html.Div(
-                                        [html.Span("衣装"), html.Span("絆ランク")],
+                                        [
+                                            html.Span("衣装"),
+                                            html.Span("絆ランク"),
+                                            html.Span(),
+                                        ],
                                         className="costume-head bm-grid",
                                     )
                                     for _ in range(_BM_MAX_COLUMNS)
@@ -1691,6 +1696,25 @@ def create_bond_ranks_layout() -> html.Div:
     )
 
 
+def create_bond_stats_layout() -> html.Div:
+    """絆ランク統計ページ。絆ランク管理の保存データを集計して表示する。
+
+    中身は保存データを読むコールバック（callbacks.bs_render）が描く。
+    """
+    return page_container(
+        [
+            page_intro(
+                "絆ランク管理に設定した絆ランクの統計です。",
+                "絆ランク管理の内容（ログイン中はサーバー、ログインしていないときは"
+                "このブラウザに保存したもの）から集計します。未設定の衣装は数えません。",
+                actions=dcc.Link("絆ランク管理へ", href="/bond-ranks", className="btn"),
+            ),
+            html.Div(id="bs-content", children=empty_note("読み込み中...")),
+            dcc.Interval(id="bs-init", max_intervals=1, interval=200),
+        ]
+    )
+
+
 # ======================================================================
 # ルートレイアウト（URL ルーティング）
 # ======================================================================
@@ -1704,6 +1728,7 @@ PAGES = {
     "/node-compare": ("2次ノード比較", create_node_compare_layout),
     "/furniture-node": ("家具ノード比較", create_furniture_node_layout),
     "/bond-ranks": ("絆ランク管理", create_bond_ranks_layout),
+    "/bond-stats": ("絆ランク統計", create_bond_stats_layout),
 }
 
 # 主要ページ以外のページ（フッター等からのみアクセス）。

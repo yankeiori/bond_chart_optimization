@@ -1614,7 +1614,7 @@ document.querySelectorAll('table.sort-table').forEach(function (table) {
 </script>"""
 
 
-def _render_dashboard(include_admin: bool) -> str:
+def _render_dashboard(exclude_admin: bool) -> str:
     try:
         users = load_all_user_bond_ranks()
         costumes = admin_load_costumes()
@@ -1622,11 +1622,11 @@ def _render_dashboard(include_admin: bool) -> str:
         body = f'<div class="msg msg-err">利用状況の取得に失敗しました: {escape(str(e))}</div>'
         return _page("dashboard", body)
     stats = compute_usage_stats(
-        users, costumes, datetime.now(timezone.utc), include_admin
+        users, costumes, datetime.now(timezone.utc), exclude_admin
     )
     s = stats["summary"]
 
-    checked = " checked" if include_admin else ""
+    checked = " checked" if exclude_admin else ""
     excluded = (
         f"（管理者のアカウント {stats['admin_excluded']} 件を除いています）"
         if stats["admin_excluded"]
@@ -1634,8 +1634,8 @@ def _render_dashboard(include_admin: bool) -> str:
     )
     toolbar = f"""
     <form method="get" action="/admin" class="toolbar">
-      <label><input type="checkbox" name="include_admin" value="1"{checked}
-             onchange="this.form.submit()"> 管理者のアカウントも数える</label>
+      <label><input type="checkbox" name="exclude_admin" value="1"{checked}
+             onchange="this.form.submit()"> 管理者のアカウントを除く</label>
       <noscript><button type="submit" class="btn-save">更新</button></noscript>
       <span class="muted">{excluded}</span>
     </form>"""
@@ -1715,4 +1715,4 @@ def _render_dashboard(include_admin: bool) -> str:
 @server.route("/admin")
 @_require_login
 def admin_dashboard():
-    return _render_dashboard(request.args.get("include_admin") == "1")
+    return _render_dashboard(request.args.get("exclude_admin") == "1")

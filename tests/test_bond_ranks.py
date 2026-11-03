@@ -3,8 +3,10 @@
 import pytest
 from dash.exceptions import PreventUpdate
 
+from app.backend.bond_exp import BOND_EXP_PER_LEVEL
 from app.backend.bond_ranks import (
     apply_page_edits,
+    bond_rank_stats,
     merge_ocr_cards,
     normalize_bond_ranks,
     ranks_for_costumes,
@@ -14,6 +16,9 @@ from app.frontend.callbacks import (
     _bm_ocr_apply,
     _bm_ocr_preview,
     _bm_rows,
+    _bs_hist_bins,
+    _bs_render,
+    bs_bin_size,
     _co_costume_ids,
     _overlay_bond_ranks,
     _save_inputs_to_bond_ranks,
@@ -150,8 +155,9 @@ class TestBmRows:
         options = [{"value": 1, "label": "ホシノ"}, {"value": 2, "label": "ノア"}]
         rows = _bm_rows(data, options)
         assert [r.children[0].children[-1] for r in rows] == ["ホシノ", "ノア"]
-        assert [len(r.children) for r in rows] == [2, 2]  # 残りEXP欄は無い
+        assert [len(r.children) for r in rows] == [3, 3]  # 衣装 / 絆ランク / +1
         rank = [r.children[1] for r in rows]
+        assert rows[1].children[2].id == {"type": "bm-rank-inc", "costume": 2}
         assert rank[0].value is None  # 未設定
         assert rank[1].id == {"type": "bm-rank", "costume": 2}
         assert rank[1].value == 30
@@ -351,3 +357,106 @@ class TestBmOcrApply:
         )
         assert ranks == [30, 20, 72]
         assert n == 2
+
+
+class TestBondRankStats:
+    _OPTIONS = [
+        {"value": 1, "label": "アル", "student": "アル"},
+        {"value": 2, "label": "アル（ドレス）", "student": "アル"},
+        {"value": 3, "label": "ムツキ", "student": "ムツキ"},
+        {"value": 4, "label": "カヨコ", "student": "カヨコ"},
+    ]
+
+    def test_counts_known_costumes_only(self):
+        data = _data(
+            {"costume_id": 1, "rank": 100},
+            {"costume_id": 2, "rank": 47},
+            {"costume_id": 3, "rank": 9},
+            {"costume_id": 99, "rank": 80},  # 削除済みの衣装
+        )
+        st = bond_rank_stats(data, self._OPTIONS)
+        assert st["count"] == 3
+        assert st["costume_total"] == 4
+        assert st["students"] == 2
+        assert st["student_total"] == 3
+        assert st["total"] == 156
+        assert st["avg"] == 52
+        assert st["median"] == 47
+        assert st["bonus_max"] == 1
+        assert st["max_rank"] == 1
+        assert st["ranks"] == [9, 47, 100]
+        assert [r["label"] for r in st["top"]] == ["アル", "アル（ドレス）", "ムツキ"]
+
+    def test_exp(self):
+        exp_to = lambda r: sum(BOND_EXP_PER_LEVEL[: r - 1])  # noqa: E731
+        data = _data({"costume_id": 1, "rank": 100}, {"costume_id": 3, "rank": 20})
+        st = bond_rank_stats(data, self._OPTIONS)
+        assert st["exp_total"] == exp_to(100) + exp_to(20)
+        assert st["exp_to_bonus_max"] == exp_to(50) - exp_to(20)
+        assert st["exp_to_max"] == exp_to(100) - exp_to(20)
+
+    def test_near(self):
+        data = _data(
+            {"costume_id": 1, "rank": 99},
+            {"costume_id": 2, "rank": 45},
+            {"costume_id": 3, "rank": 44},  # 5ランクより手前
+            {"costume_id": 4, "rank": 49},
+        )
+        near = bond_rank_stats(data, self._OPTIONS)["near"]
+        # 必要な絆経験値の少ない順（99→100 は 45→50 より少ない）
+        assert [(r["label"], r["target"]) for r in near] == [
+            ("カヨコ", 50),
+            ("アル", 100),
+            ("アル（ドレス）", 50),
+        ]
+        assert near[0]["exp"] == BOND_EXP_PER_LEVEL[48]
+        assert near[1]["exp"] == BOND_EXP_PER_LEVEL[98]
+
+    def test_empty(self):
+        st = bond_rank_stats(None, self._OPTIONS)
+        assert st["count"] == 0
+        assert st["avg"] is None
+        assert st["near"] == []
+
+
+class TestBsRender:
+    _OPTIONS = [
+        {"value": 1, "label": "アル", "student": "アル"},
+        {"value": 2, "label": "ムツキ", "student": "ムツキ"},
+    ]
+
+    def test_renders_sections(self):
+        out = str(_bs_render(_data({"costume_id": 1, "rank": 48}), self._OPTIONS))
+        assert "1 / 2" in out
+        assert "あと少しの衣装" in out
+        assert "48 → 50" in out
+        assert "bs-hist-graph" in out
+
+    def test_no_ranks(self):
+        out = str(_bs_render(None, self._OPTIONS))
+        assert "まだ設定されていません" in out
+        assert "/bond-ranks" in out
+
+
+class TestBsBinSize:
+    def test_bins_10(self):
+        bins = _bs_hist_bins([1, 9, 10, 99, 100], 10)
+        assert [b["label"] for b in bins][:2] == ["1〜9", "10〜19"]
+        assert [b["label"] for b in bins][-2:] == ["90〜99", "100"]
+        assert [b["count"] for b in bins] == [2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1]
+
+    def test_bins_1_and_5(self):
+        assert len(_bs_hist_bins([], 1)) == 100
+        assert [b["label"] for b in _bs_hist_bins([], 5)][:2] == ["1〜4", "5〜9"]
+
+    def test_figure(self):
+        fig = bs_bin_size(5, [3, 48])
+        assert fig.data[0].customdata[0] == "1〜4"
+        assert fig.data[0].y[0] == 1
+
+    def test_invalid(self):
+        for v in (None, 0, 2, 7):
+            with pytest.raises(PreventUpdate):
+                bs_bin_size(v, [1])
+        with pytest.raises(PreventUpdate):
+            bs_bin_size(10, None)
