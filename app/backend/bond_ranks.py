@@ -9,8 +9,14 @@ localStorage の値は壊れている可能性があるため、読むときは�
 normalize_bond_ranks を通す。
 """
 
+from statistics import median
+
+from app.backend.bond_exp import BOND_EXP_PER_LEVEL
+
 MIN_RANK = 1
 MAX_RANK = 100
+# 絆ボーナスが上限になる絆ランク
+BONUS_MAX_RANK = 50
 
 
 def _to_int(value) -> int | None:
@@ -149,3 +155,71 @@ def ranks_for_costumes(data, costume_ids) -> dict[int, int]:
         if e is not None:
             ranks[i] = e["rank"]
     return ranks
+
+
+# 「あと少し」に出す範囲: 目標の絆ランクの何ランク手前から出すか
+NEAR_RANKS = 5
+# 「絆ランクが高い衣装」に出す数
+TOP_COUNT = 10
+
+
+def _exp_to(rank: int) -> int:
+    """絆ランク 1 から rank までに必要な累計の絆経験値。"""
+    return sum(BOND_EXP_PER_LEVEL[: rank - 1])
+
+
+def bond_rank_stats(data, options: list[dict]) -> dict:
+    """絆ランク統計ページに出す、自分の絆ランクの統計。
+
+    options は衣装ドロップダウンのオプション [{value, label, student}, ...]
+    （表示順）。ここに無い衣装（削除済み）の保存値は数えない。
+    ranks は分布（ヒストグラム）用の設定済みの絆ランク（昇順）。
+    """
+    by_cid = bond_ranks_by_costume(data)
+    rows = [
+        {
+            "label": o["label"],
+            "student": o.get("student"),
+            "rank": by_cid[o["value"]]["rank"],
+        }
+        for o in options
+        if o["value"] in by_cid
+    ]
+    ranks = [r["rank"] for r in rows]
+
+    near = []
+    for r in rows:
+        target = next(
+            (t for t in (BONUS_MAX_RANK, MAX_RANK) if t - NEAR_RANKS <= r["rank"] < t),
+            None,
+        )
+        if target is not None:
+            near.append(
+                {
+                    **r,
+                    "target": target,
+                    "exp": _exp_to(target) - _exp_to(r["rank"]),
+                }
+            )
+    near.sort(key=lambda r: r["exp"])
+
+    return {
+        "count": len(ranks),
+        "costume_total": len(options),
+        # 生徒名の無い衣装は生徒数に数えない
+        "students": len({r["student"] for r in rows} - {None}),
+        "student_total": len({o.get("student") for o in options} - {None}),
+        "total": sum(ranks),
+        "avg": sum(ranks) / len(ranks) if ranks else None,
+        "median": median(ranks) if ranks else None,
+        "bonus_max": sum(1 for r in ranks if r >= BONUS_MAX_RANK),
+        "max_rank": sum(1 for r in ranks if r == MAX_RANK),
+        "exp_total": sum(_exp_to(r) for r in ranks),
+        "exp_to_bonus_max": sum(
+            _exp_to(BONUS_MAX_RANK) - _exp_to(r) for r in ranks if r < BONUS_MAX_RANK
+        ),
+        "exp_to_max": sum(_exp_to(MAX_RANK) - _exp_to(r) for r in ranks),
+        "ranks": sorted(ranks),
+        "near": near,
+        "top": sorted(rows, key=lambda r: -r["rank"])[:TOP_COUNT],
+    }
