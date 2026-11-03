@@ -164,8 +164,17 @@ def _users():
 
 
 class TestUsageStats:
-    def test_excludes_admin_by_default(self):
+    def test_includes_admin_by_default(self):
         stats = compute_usage_stats(_users(), _COSTUMES, _NOW)
+        assert stats["summary"]["users"] == 4
+        assert stats["admin_excluded"] == 0
+        hist = {b["label"]: b["count"] for b in stats["rank_hist"]}
+        assert hist["1〜9"] == 1
+        assert hist["50〜59"] == 1
+        assert hist["100"] == 1
+
+    def test_excludes_admin(self):
+        stats = compute_usage_stats(_users(), _COSTUMES, _NOW, exclude_admin=True)
         s = stats["summary"]
         assert s["users"] == 3
         assert s["savers"] == 2
@@ -176,17 +185,8 @@ class TestUsageStats:
         assert stats["admin_excluded"] == 1
         assert [u["id"] for u in stats["users"]] == [2, 3, 4]
 
-    def test_include_admin(self):
-        stats = compute_usage_stats(_users(), _COSTUMES, _NOW, include_admin=True)
-        assert stats["summary"]["users"] == 4
-        assert stats["admin_excluded"] == 0
-        hist = {b["label"]: b["count"] for b in stats["rank_hist"]}
-        assert hist["1〜9"] == 1
-        assert hist["50〜59"] == 1
-        assert hist["100"] == 1
-
     def test_by_costume(self):
-        stats = compute_usage_stats(_users(), _COSTUMES, _NOW)
+        stats = compute_usage_stats(_users(), _COSTUMES, _NOW, exclude_admin=True)
         by_id = {c["costume_id"]: c for c in stats["by_costume"]}
         assert by_id[1]["count"] == 2
         assert by_id[1]["avg"] == 30
@@ -201,7 +201,7 @@ class TestUsageStats:
         assert daily[0]["date"] == (_NOW - timedelta(days=20)).astimezone(JST).date()
         assert daily[-1]["date"] == _NOW.astimezone(JST).date()
         assert len(daily) == 21
-        assert sum(d["count"] for d in daily) == 3
+        assert sum(d["count"] for d in daily) == 4
 
     def test_empty(self):
         stats = compute_usage_stats([], _COSTUMES, _NOW)
@@ -221,14 +221,15 @@ class TestDashboard:
         page = dash_client.get("/admin").get_data(as_text=True)
         assert "ダッシュボード" in page
         assert "ムツキ" in page
-        assert "管理者のアカウント 1 件を除いています" in page
+        assert "除いています" not in page  # 既定では管理者も数える
+        assert '<span class="tag">管理者</span>' in page
         assert 'class="active">ダッシュボード' in page
         assert "schaledb" not in page.lower()
 
-    def test_include_admin(self, dash_client):
-        page = dash_client.get("/admin?include_admin=1").get_data(as_text=True)
-        assert "除いています" not in page
-        assert '<span class="tag">管理者</span>' in page
+    def test_exclude_admin(self, dash_client):
+        page = dash_client.get("/admin?exclude_admin=1").get_data(as_text=True)
+        assert "管理者のアカウント 1 件を除いています" in page
+        assert '<span class="tag">管理者</span>' not in page
 
     def test_requires_admin(self, client, monkeypatch):
         _login_as(monkeypatch, _OTHER)

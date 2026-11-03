@@ -40,7 +40,7 @@ def compute_usage_stats(
     users: list[dict],
     costumes: list[dict],
     now: datetime,
-    include_admin: bool = False,
+    exclude_admin: bool = False,
 ) -> dict:
     """利用状況の集計。
 
@@ -50,10 +50,10 @@ def compute_usage_stats(
     costumes : [{costume_id, student_name, costume_name}, ...]（表示順）。
         ここに無い衣装（削除済み）の保存値は集計から外す。
     now : 現在時刻（timezone 付き）。
-    include_admin : 管理者のアカウントも数えるか。
+    exclude_admin : 管理者のアカウントを除くか（既定は含める）。
     """
     known = {c["costume_id"] for c in costumes}
-    targets = [u for u in users if include_admin or not u["is_admin"]]
+    targets = [u for u in users if not (exclude_admin and u["is_admin"])]
     recent = now - timedelta(days=RECENT_DAYS)
 
     per_user = []
@@ -139,7 +139,5 @@ def compute_usage_stats(
         "daily_new": daily_new,
         "by_costume": by_costume,
         "users": per_user,
-        "admin_excluded": sum(1 for u in users if u["is_admin"])
-        if not include_admin
-        else 0,
+        "admin_excluded": len(users) - len(targets),
     }
