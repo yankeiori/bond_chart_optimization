@@ -206,8 +206,9 @@ def bond_rank_stats(data, options: list[dict]) -> dict:
     return {
         "count": len(ranks),
         "costume_total": len(options),
-        "students": len({r["student"] for r in rows}),
-        "student_total": len({o.get("student") for o in options}),
+        # 生徒名の無い衣装は生徒数に数えない
+        "students": len({r["student"] for r in rows} - {None}),
+        "student_total": len({o.get("student") for o in options} - {None}),
         "total": sum(ranks),
         "avg": sum(ranks) / len(ranks) if ranks else None,
         "median": median(ranks) if ranks else None,
