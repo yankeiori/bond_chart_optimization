@@ -3129,8 +3129,16 @@ def _bm_rows(bond_ranks, options: list[dict]) -> list:
                         placeholder="未設定",
                         style=BM_ROW_RANK_STYLE,
                     ),
-                    # 絆ランクは基本1ずつ上がるので、押すだけで +1 できるようにする
-                    # （main.py の clientside_callback。未設定なら 1 にする）
+                    # 絆ランクは基本1ずつ上がるので、押すだけで ±1 できるようにする
+                    # （main.py の clientside_callback。+1 は未設定なら 1 にし、
+                    #   -1 は未設定ならそのまま・1 より下げない）
+                    html.Button(
+                        "-1",
+                        id={"type": "bm-rank-dec", "costume": cid},
+                        n_clicks=0,
+                        className="btn btn-sm bm-inc-btn",
+                        title="絆ランクを1下げる",
+                    ),
                     html.Button(
                         "+1",
                         id={"type": "bm-rank-inc", "costume": cid},

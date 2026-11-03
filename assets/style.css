@@ -459,9 +459,9 @@ details.panel[open] > summary {
 .co-grid {
     grid-template-columns: minmax(120px, 1.2fr) 80px minmax(0, 3fr);
 }
-/* 絆ランク管理: 衣装 / 絆ランク / +1 */
+/* 絆ランク管理: 衣装 / 絆ランク / -1 / +1 */
 .bm-grid {
-    grid-template-columns: minmax(0, 1fr) 76px 44px;
+    grid-template-columns: minmax(0, 1fr) 76px 40px 40px;
 }
 .bm-inc-btn {
     width: 100%;
@@ -989,7 +989,7 @@ input[type="number"] {
         gap: 4px;
     }
     .bm-grid {
-        grid-template-columns: minmax(0, 1fr) 64px 44px;
+        grid-template-columns: minmax(0, 1fr) 64px 40px 40px;
     }
     .co-grid {
         grid-template-columns: minmax(0, 1fr) 80px;

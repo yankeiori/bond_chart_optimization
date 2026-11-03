@@ -211,6 +211,20 @@ application.clientside_callback(
     prevent_initial_call=True,
 )
 
+# --- 絆ランク管理: -1 ボタン（未設定ならそのまま、1 より下げない） ---
+application.clientside_callback(
+    """
+    function(n, v) {
+        if (!n || !Number.isInteger(v)) return window.dash_clientside.no_update;
+        return Math.max(1, Math.min(100, v - 1));  // MAX_RANK
+    }
+    """,
+    Output({"type": "bm-rank", "costume": MATCH}, "value", allow_duplicate=True),
+    Input({"type": "bm-rank-dec", "costume": MATCH}, "n_clicks"),
+    State({"type": "bm-rank", "costume": MATCH}, "value"),
+    prevent_initial_call=True,
+)
+
 # --- 絆ランク管理: 範囲外の絆ランクを赤枠で示す ---
 application.clientside_callback(
     """
