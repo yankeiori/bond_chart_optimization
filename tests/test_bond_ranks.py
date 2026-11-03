@@ -418,6 +418,14 @@ class TestBondRankStats:
         assert st["avg"] is None
         assert st["near"] == []
 
+    def test_students_without_name(self):
+        options = [*self._OPTIONS, {"value": 5, "label": "不明"}]
+        data = _data({"costume_id": 1, "rank": 10}, {"costume_id": 5, "rank": 10})
+        st = bond_rank_stats(data, options)
+        assert st["count"] == 2
+        assert st["students"] == 1
+        assert st["student_total"] == 3
+
 
 class TestBsRender:
     _OPTIONS = [
