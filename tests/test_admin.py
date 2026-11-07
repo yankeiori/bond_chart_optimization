@@ -1,5 +1,6 @@
 """管理画面のフォーム解析・認証のテスト。"""
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -246,12 +247,28 @@ class TestDashboard:
         assert "除いています" not in page  # 既定では管理者も数える
         assert '<span class="tag">管理者</span>' in page
         assert 'class="active">ダッシュボード' in page
-        assert 'id="dist-costume-table"' in page
-        assert 'id="dist-student-table"' in page
-        # 生徒は名前の完全一致で選ぶ
-        assert '<option value="ムツキ">ムツキ</option>' in page
-        assert 'data-student="アル" data-label="ドレス"' in page
+        # 生徒別の絆ランク分布: 生徒は候補から選び、グラフはデータから描く
+        assert '<datalist id="dist-students">' in page
+        assert '<option value="ムツキ"></option>' in page
+        assert 'id="dist-costume-table"' not in page  # 分布の表は出さない
         assert "schaledb" not in page.lower()
+
+    def test_distribution_data(self, dash_client, monkeypatch):
+        costumes = [
+            *_COSTUMES,
+            {"costume_id": 4, "student_name": "ヒナ", "costume_name": None},
+        ]
+        monkeypatch.setattr(admin, "admin_load_costumes", lambda: costumes)
+        page = dash_client.get("/admin").get_data(as_text=True)
+        raw = page.split('<script type="application/json" id="dist-data">')[1]
+        data = json.loads(raw.split("</script>")[0])
+        assert len(data["buckets"]) == 11
+        labels = {(c["student"], c["label"]) for c in data["costumes"]}
+        assert ("アル", "ドレス") in labels
+        assert ("ヒナ", "通常") in labels  # 衣装名が無い衣装は「通常」
+        assert set(data["students"]) == {"アル", "ムツキ", "ヒナ"}
+        assert sum(data["students"]["アル"]["hist"]) == 4
+        assert "標準" not in page
 
     def test_exclude_admin(self, dash_client):
         page = dash_client.get("/admin?exclude_admin=1").get_data(as_text=True)

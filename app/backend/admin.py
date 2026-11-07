@@ -348,9 +348,7 @@ _STYLE = """
   th.sorted-asc::after { content: " ▲"; opacity: 1; }
   th.sorted-desc::after { content: " ▼"; opacity: 1; }
   .muted { color: #999; }
-  td.hist-cell { min-width: 40px; }
-  .dist-table tbody tr { cursor: pointer; }
-  .dist-table tbody tr:hover td:not(.hist-cell) { background: #eef6ff; }
+  #dist-student-input { width: 220px; }
   .tag { display: inline-block; padding: 0 6px; border-radius: 8px;
          background: #eee; color: #555; font-size: 0.7rem; margin-left: 4px; }
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
@@ -1523,13 +1521,17 @@ def _sort_value(value) -> str:
     return "" if value is None else str(value)
 
 
+# 衣装名が無い（通常の）衣装の表示名
+_DEFAULT_COSTUME = "通常"
+
+
 def _costume_table(by_costume: list[dict]) -> str:
     # 既定は「登録人数が多い順 → 平均絆ランクが高い順」
     ordered = sorted(by_costume, key=lambda c: (-c["count"], -(c["avg"] or 0)))
     rows = ""
     for c in ordered:
         name = escape(c["student_name"])
-        cname = escape(c["costume_name"] or "（標準）")
+        cname = escape(c["costume_name"] or _DEFAULT_COSTUME)
         rows += f"""<tr data-search="{name} {cname}">
           <td data-v="{name}">{name}</td>
           <td data-v="{cname}">{cname}</td>
@@ -1557,127 +1559,65 @@ def _costume_table(by_costume: list[dict]) -> str:
     </div>"""
 
 
-def _hist_cells(hist: list[int], count: int) -> str:
-    """絆ランク分布の区切りごとの件数のセル。件数の割合で背景を濃くする。"""
-    cells = ""
-    for n in hist:
-        if not n:
-            cells += (
-                '<td class="num hist-cell" data-v="0"><span class="muted">0</span></td>'
-            )
-            continue
-        share = n / count
-        cells += (
-            f'<td class="num hist-cell" data-v="{n}" title="{share:.0%}"'
-            f' style="background:rgba(74,144,217,{0.12 + 0.6 * share:.2f})">{n}</td>'
-        )
-    return cells
-
-
-def _hist_ths() -> str:
-    return "".join(_sortable_th(bucket_label(lo, hi)) for lo, hi in RANK_BUCKETS)
-
-
-def _dist_row_attrs(student: str, label: str, hist: list[int], avg) -> str:
-    """分布の表の行に付ける、グラフ用のデータ属性。"""
-    return (
-        f'data-student="{escape(student)}" data-label="{escape(label)}"'
-        f' data-hist="{",".join(map(str, hist))}" data-avg="{_sort_value(avg)}"'
-    )
-
-
 def _distribution_section(by_costume: list[dict], by_student: list[dict]) -> str:
-    """生徒ごとの絆ランク分布（衣装ごと / 同じ生徒の衣装の合計を切り替え）。
+    """生徒ごとの絆ランク分布のグラフ（衣装ごと / 同じ生徒の衣装の合計を切り替え）。
 
-    生徒は名前の完全一致で選ぶ（「ヒナ」で「ヒナタ」が混ざらないように）。
-    選んだ生徒のグラフはブラウザで行のデータ属性から描く。
+    生徒は入力欄で探して選び、名前の完全一致で絞る（「ヒナ」で「ヒナタ」が
+    混ざらないように）。グラフはブラウザで JSON のデータから描く。
     """
-    costume_rows = ""
-    for c in sorted(by_costume, key=lambda c: (-c["count"], -(c["avg"] or 0))):
-        name = escape(c["student_name"])
-        cname = escape(c["costume_name"] or "（標準）")
-        attrs = _dist_row_attrs(
-            c["student_name"], c["costume_name"] or "（標準）", c["hist"], c["avg"]
-        )
-        costume_rows += f"""<tr data-search="{name} {cname}" {attrs}>
-          <td data-v="{name}">{name}</td>
-          <td data-v="{cname}">{cname}</td>
-          <td class="num" data-v="{c["count"]}">{c["count"]}</td>
-          <td class="num" data-v="{_sort_value(c["avg"])}">{_fmt_num(c["avg"])}</td>
-          {_hist_cells(c["hist"], c["count"])}
-        </tr>"""
-    student_rows = ""
-    for st in sorted(by_student, key=lambda s: (-s["count"], -(s["avg"] or 0))):
-        name = escape(st["student_name"])
-        attrs = _dist_row_attrs(
-            st["student_name"],
-            f"{st['student_name']}（衣装 {st['costumes']} 種の合計）",
-            st["hist"],
-            st["avg"],
-        )
-        student_rows += f"""<tr data-search="{name}" {attrs}>
-          <td data-v="{name}">{name}</td>
-          <td class="num" data-v="{st["costumes"]}">{st["costumes"]}</td>
-          <td class="num" data-v="{st["count"]}">{st["count"]}</td>
-          <td class="num" data-v="{_sort_value(st["avg"])}">{_fmt_num(st["avg"])}</td>
-          {_hist_cells(st["hist"], st["count"])}
-        </tr>"""
-    # 生徒の選択肢は表示優先度順（by_student の順）
+    data = {
+        "buckets": [
+            {"label": bucket_label(lo, hi), "short": str(lo)} for lo, hi in RANK_BUCKETS
+        ],
+        "costumes": [
+            {
+                "student": c["student_name"],
+                "label": c["costume_name"] or _DEFAULT_COSTUME,
+                "hist": c["hist"],
+                "avg": c["avg"],
+            }
+            for c in by_costume
+        ],
+        "students": {
+            st["student_name"]: {
+                "label": f"{st['student_name']}（衣装 {st['costumes']} 種の合計）",
+                "hist": st["hist"],
+                "avg": st["avg"],
+            }
+            for st in by_student
+        },
+    }
+    # </script> で閉じられないように < をエスケープする
+    data_json = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
     options = "".join(
-        f'<option value="{escape(st["student_name"])}">'
-        f"{escape(st['student_name'])}</option>"
-        for st in by_student
-    )
-    buckets = escape(
-        ",".join(f"{bucket_label(lo, hi)}:{lo}" for lo, hi in RANK_BUCKETS)
+        f'<option value="{escape(name)}"></option>'
+        for name in sorted(st["student_name"] for st in by_student)
     )
     return f"""
     <div class="toolbar">
+      <label>生徒: <input type="search" id="dist-student-input" list="dist-students"
+             placeholder="生徒名を入力して選ぶ" autocomplete="off"
+             oninput="renderDist()"></label>
+      <datalist id="dist-students">{options}</datalist>
       <span>
         <label><input type="radio" name="dist-mode" value="costume" checked
                onchange="renderDist()"> 衣装ごと</label>
         <label><input type="radio" name="dist-mode" value="student"
                onchange="renderDist()"> 同じ生徒の衣装を合計</label>
       </span>
-      <label>生徒: <select id="dist-student-select" onchange="renderDist()">
-        <option value="">（すべて）</option>{options}</select></label>
-      <label>絞り込み: <input type="text" id="dist-filter" placeholder="生徒名・衣装名"
-             oninput="renderDist()"></label>
     </div>
-    <div class="charts" id="dist-charts" data-buckets="{buckets}"></div>
-    <div class="summary" style="margin-top:8px">行をクリックすると、その生徒のグラフを出します。
-      セルの色は、その行の件数に占める割合です。</div>
-    <div class="table-wrap" id="dist-costume">
-    <table id="dist-costume-table" class="sort-table dist-table">
-      <thead><tr>
-        {_sortable_th("生徒", "text")}{_sortable_th("衣装", "text")}
-        {_sortable_th("登録人数")}{_sortable_th("平均")}{_hist_ths()}
-      </tr></thead>
-      <tbody>{costume_rows}</tbody>
-    </table>
-    </div>
-    <div class="table-wrap" id="dist-student" hidden>
-    <table id="dist-student-table" class="sort-table dist-table">
-      <thead><tr>
-        {_sortable_th("生徒", "text")}{_sortable_th("衣装数")}
-        {_sortable_th("登録件数")}{_sortable_th("平均")}{_hist_ths()}
-      </tr></thead>
-      <tbody>{student_rows}</tbody>
-    </table>
-    </div>
+    <div class="charts" id="dist-charts"></div>
+    <script type="application/json" id="dist-data">{data_json}</script>
     {_DIST_SCRIPT}"""
 
 
-# 生徒別の絆ランク分布: 衣装ごと／合計の切り替え、生徒の選択（完全一致）と
-# 絞り込み（部分一致）、選んだ生徒のグラフ（_bar_chart と同じ見た目）。
+# 生徒別の絆ランク分布: 生徒の選択（完全一致）と衣装ごと／合計の切り替え、
+# 選んだ生徒のグラフ（_bar_chart と同じ見た目）。
 _DIST_SCRIPT = """
 <script>
 (function () {
-  var buckets = document.getElementById('dist-charts').getAttribute('data-buckets')
-    .split(',').map(function (b) {
-      var i = b.lastIndexOf(':');
-      return { label: b.slice(0, i), short: b.slice(i + 1) };
-    });
+  var data = JSON.parse(document.getElementById('dist-data').textContent);
+  var buckets = data.buckets;
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -1686,19 +1626,18 @@ _DIST_SCRIPT = """
     return e;
   }
 
-  function chart(tr) {
-    var hist = tr.getAttribute('data-hist').split(',').map(Number);
+  function chart(item) {
+    var hist = item.hist;
     var total = hist.reduce(function (a, b) { return a + b; }, 0);
-    var avg = tr.getAttribute('data-avg');
     var box = el('div', 'chart');
-    box.appendChild(el('h3', '', tr.getAttribute('data-label')));
+    box.appendChild(el('h3', '', item.label));
     if (!total) {
       box.appendChild(el('div', 'empty', '登録がありません。'));
       return box;
     }
     var peak = Math.max.apply(null, hist);
     box.appendChild(el('div', 'summary', total + '件・平均 '
-      + (+parseFloat(avg).toFixed(1)) + '（最大 ' + peak + '件）'));
+      + (+item.avg.toFixed(1)) + '（最大 ' + peak + '件）'));
     var bars = el('div', 'bars'), labels = el('div', 'bar-labels');
     hist.forEach(function (n, i) {
       var tip = buckets[i].label + ': ' + n + '件（' + Math.round(n / total * 100) + '%）';
@@ -1722,36 +1661,23 @@ _DIST_SCRIPT = """
 
   window.renderDist = function () {
     var mode = document.querySelector('input[name=dist-mode]:checked').value;
-    var student = document.getElementById('dist-student-select').value;
-    var q = document.getElementById('dist-filter').value.trim().toLowerCase();
-    document.getElementById('dist-costume').hidden = mode !== 'costume';
-    document.getElementById('dist-student').hidden = mode !== 'student';
+    var name = document.getElementById('dist-student-input').value.trim();
     var charts = document.getElementById('dist-charts');
     charts.textContent = '';
-    ['costume', 'student'].forEach(function (m) {
-      var rows = document.querySelectorAll('#dist-' + m + '-table tbody tr');
-      rows.forEach(function (tr) {
-        var text = (tr.getAttribute('data-search') || '').toLowerCase();
-        var hit = (!student || tr.getAttribute('data-student') === student)
-          && (!q || text.indexOf(q) >= 0);
-        tr.style.display = hit ? '' : 'none';
-        if (student && hit && m === mode) charts.appendChild(chart(tr));
+    if (!Object.prototype.hasOwnProperty.call(data.students, name)) {
+      charts.appendChild(el('div', 'muted', name
+        ? '「' + name + '」という生徒はいません。候補から選んでください。'
+        : '生徒を選ぶと、絆ランクの分布をグラフで表示します。'));
+      return;
+    }
+    if (mode === 'student') {
+      charts.appendChild(chart(data.students[name]));
+    } else {
+      data.costumes.forEach(function (c) {
+        if (c.student === name) charts.appendChild(chart(c));
       });
-    });
-    if (!student) {
-      charts.appendChild(el('div', 'muted',
-        '生徒を選ぶか表の行をクリックすると、絆ランクの分布をグラフで表示します。'));
     }
   };
-
-  document.querySelectorAll('.dist-table tbody tr').forEach(function (tr) {
-    tr.addEventListener('click', function () {
-      document.getElementById('dist-student-select').value =
-        tr.getAttribute('data-student');
-      renderDist();
-      document.getElementById('distribution').scrollIntoView({ behavior: 'smooth' });
-    });
-  });
   // 戻るで開き直したときにブラウザが復元した入力に合わせる
   renderDist();
 })();
