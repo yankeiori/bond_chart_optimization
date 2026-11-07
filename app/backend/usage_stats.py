@@ -25,6 +25,11 @@ def bucket_label(lo: int, hi: int) -> str:
     return str(lo) if lo == hi else f"{lo}〜{hi}"
 
 
+def rank_histogram(ranks: list[int]) -> list[int]:
+    """RANK_BUCKETS の区切りごとの件数。"""
+    return [sum(1 for r in ranks if lo <= r <= hi) for lo, hi in RANK_BUCKETS]
+
+
 def _rank_summary(ranks: list[int]) -> dict:
     if not ranks:
         return {"count": 0, "avg": None, "median": None, "max": None}
@@ -94,12 +99,8 @@ def compute_usage_stats(
     }
 
     rank_hist = [
-        {
-            "label": bucket_label(lo, hi),
-            "low": lo,
-            "count": sum(1 for r in all_ranks if lo <= r <= hi),
-        }
-        for lo, hi in RANK_BUCKETS
+        {"label": bucket_label(lo, hi), "low": lo, "count": n}
+        for (lo, hi), n in zip(RANK_BUCKETS, rank_histogram(all_ranks))
     ]
 
     # 新規利用者（初回ログイン）の日別件数。最初の利用者の日から今日まで
@@ -121,6 +122,9 @@ def compute_usage_stats(
             day += timedelta(days=1)
 
     by_costume = []
+    # 同じ生徒の衣装を合計した絆ランク（生徒は衣装の表示順で最初に出た順）
+    ranks_by_student: dict[str, list[int]] = {}
+    costumes_by_student: dict[str, int] = {}
     for c in costumes:
         ranks = ranks_by_costume[c["costume_id"]]
         by_costume.append(
@@ -129,15 +133,31 @@ def compute_usage_stats(
                 "student_name": c["student_name"],
                 "costume_name": c["costume_name"],
                 "over50": sum(1 for r in ranks if r >= 50),
+                "hist": rank_histogram(ranks),
                 **_rank_summary(ranks),
             }
         )
+        name = c["student_name"]
+        ranks_by_student.setdefault(name, []).extend(ranks)
+        costumes_by_student[name] = costumes_by_student.get(name, 0) + 1
+
+    by_student = [
+        {
+            "student_name": name,
+            "costumes": costumes_by_student[name],
+            "over50": sum(1 for r in ranks if r >= 50),
+            "hist": rank_histogram(ranks),
+            **_rank_summary(ranks),
+        }
+        for name, ranks in ranks_by_student.items()
+    ]
 
     return {
         "summary": summary,
         "rank_hist": rank_hist,
         "daily_new": daily_new,
         "by_costume": by_costume,
+        "by_student": by_student,
         "users": per_user,
         "admin_excluded": len(users) - len(targets),
     }
