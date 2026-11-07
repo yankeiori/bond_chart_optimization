@@ -11,6 +11,8 @@ import pytest
 from app.backend.presets import PRESETS
 from app.backend.student import BOND_RANGES
 from app.frontend.layout import (
+    bm_student_names,
+    create_bond_ranks_layout,
     create_layout,
     create_required_exp_layout,
     create_root_layout,
@@ -369,6 +371,22 @@ class TestMakeBondRankInput:
 # ---------------------------------------------------------------------------
 # _default_costume_name
 # ---------------------------------------------------------------------------
+
+
+class TestBondRankSort:
+    def test_sort_controls(self):
+        layout = create_bond_ranks_layout()
+        (sort,) = _find_by_id(layout, "bm-sort")
+        assert [o["value"] for o in sort.options] == ["default", "rank", "kana"]
+        (direction,) = _find_by_id(layout, "bm-sort-dir")
+        assert [o["value"] for o in direction.options] == ["asc", "desc"]
+
+    def test_student_names(self):
+        options = [
+            {"value": 1, "student": "ホシノ"},
+            {"value": 2, "student": "御坂美琴"},
+        ]
+        assert bm_student_names(options) == {"1": "ホシノ", "2": "御坂美琴"}
 
 
 class TestDefaultCostumeName:
