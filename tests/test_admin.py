@@ -248,6 +248,9 @@ class TestDashboard:
         assert 'class="active">ダッシュボード' in page
         assert 'id="dist-costume-table"' in page
         assert 'id="dist-student-table"' in page
+        # 生徒は名前の完全一致で選ぶ
+        assert '<option value="ムツキ">ムツキ</option>' in page
+        assert 'data-student="アル" data-label="ドレス"' in page
         assert "schaledb" not in page.lower()
 
     def test_exclude_admin(self, dash_client):
