@@ -130,26 +130,38 @@ application.clientside_callback(
     State({"type": "bm-rank", "costume": ALL}, "value"),
 )
 
-# --- 絆ランク管理: 絆ランク順の並び替え ---
+# --- 絆ランク管理: 並び替え ---
 # 行を作り直すと入力中のフォーカスが外れるため、グリッドの order で並べ替える。
-# 未設定の衣装は常に末尾、同じ絆ランクは標準の並び（生徒の優先度順）のまま。
+# 絆ランク順では未設定の衣装を昇順・降順どちらでも末尾に置く。同じ絆ランクや
+# 同じ生徒の衣装どうしは標準の並び（生徒の優先度順）のまま。50音順は ja ロケールの
+# 比較に任せる（漢字の名前はカタカナの後ろに並ぶ）。
 application.clientside_callback(
     """
-    function(sort, rankValues, rankIds, ids) {
-        if (sort !== 'desc' && sort !== 'asc') return ids.map(() => ({}));
+    function(sort, dir, rankValues, names, rankIds, ids) {
         const rankByCostume = {};
         rankIds.forEach(function (id, i) {
             const v = rankValues[i];
             if (typeof v === 'number') rankByCostume[id.costume] = v;
         });
-        const sign = sort === 'desc' ? -1 : 1;
+        const sign = dir === 'desc' ? -1 : 1;
+        const collator = new Intl.Collator('ja');
+        const compare = {
+            default: function (a, b) { return sign * (a - b); },
+            rank: function (a, b) {
+                const ra = rankByCostume[ids[a].costume];
+                const rb = rankByCostume[ids[b].costume];
+                const ua = ra === undefined, ub = rb === undefined;
+                if (ua !== ub) return ua ? 1 : -1;
+                return ua ? 0 : sign * (ra - rb);
+            },
+            kana: function (a, b) {
+                return sign * collator.compare(
+                    names[ids[a].costume] || '', names[ids[b].costume] || ''
+                );
+            },
+        }[sort];
         const order = ids.map((id, i) => i).sort(function (a, b) {
-            const ra = rankByCostume[ids[a].costume];
-            const rb = rankByCostume[ids[b].costume];
-            const ua = ra === undefined, ub = rb === undefined;
-            if (ua !== ub) return ua ? 1 : -1;
-            if (!ua && ra !== rb) return sign * (ra - rb);
-            return a - b;
+            return compare(a, b) || a - b;
         });
         const pos = [];
         order.forEach(function (i, k) { pos[i] = k; });
@@ -158,9 +170,19 @@ application.clientside_callback(
     """,
     Output({"type": "bm-row", "costume": ALL}, "style"),
     Input("bm-sort", "value"),
+    Input("bm-sort-dir", "value"),
     Input({"type": "bm-rank", "costume": ALL}, "value"),
+    State("bm-student-names", "data"),
     State({"type": "bm-rank", "costume": ALL}, "id"),
     State({"type": "bm-row", "costume": ALL}, "id"),
+)
+
+# 並び替えの種類を変えたら、その種類でよく使う向きに合わせる（絆ランクは高い順から）
+application.clientside_callback(
+    "function(sort) { return sort === 'rank' ? 'desc' : 'asc'; }",
+    Output("bm-sort-dir", "value"),
+    Input("bm-sort", "value"),
+    prevent_initial_call=True,
 )
 
 # --- 絆ランク管理: スクリーンショットの読み取り（画像はブラウザ内で処理） ---

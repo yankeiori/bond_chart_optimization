@@ -1442,6 +1442,11 @@ def bm_search_index(options: list[dict]) -> dict[str, str]:
     }
 
 
+def bm_student_names(options: list[dict]) -> dict[str, str]:
+    """衣装ID -> 生徒名（50音順の並び替えに使う）。"""
+    return {str(o["value"]): o["student"] for o in options}
+
+
 def _google_login_button() -> html.A:
     """「Google でログイン」ボタン（Google のブランドガイドラインの
     ライトテーマ: 白地・灰色の枠・G ロゴ）。"""
@@ -1627,13 +1632,24 @@ def create_bond_ranks_layout() -> html.Div:
                                 id="bm-sort",
                                 options=[
                                     {"label": "標準の並び", "value": "default"},
-                                    {"label": "絆ランクが高い順", "value": "desc"},
-                                    {"label": "絆ランクが低い順", "value": "asc"},
+                                    {"label": "絆ランク順", "value": "rank"},
+                                    {"label": "50音順", "value": "kana"},
                                 ],
                                 value="default",
                                 clearable=False,
                                 searchable=False,
-                                style={"width": "180px", "fontSize": "0.85rem"},
+                                style={"width": "140px", "fontSize": "0.85rem"},
+                            ),
+                            dcc.Dropdown(
+                                id="bm-sort-dir",
+                                options=[
+                                    {"label": "昇順", "value": "asc"},
+                                    {"label": "降順", "value": "desc"},
+                                ],
+                                value="asc",
+                                clearable=False,
+                                searchable=False,
+                                style={"width": "90px", "fontSize": "0.85rem"},
                             ),
                             html.Span(
                                 id="bm-count",
@@ -1690,6 +1706,9 @@ def create_bond_ranks_layout() -> html.Div:
             ),
             dcc.Store(
                 id="bm-search-index", data=bm_search_index(get_costume_options())
+            ),
+            dcc.Store(
+                id="bm-student-names", data=bm_student_names(get_costume_options())
             ),
             dcc.Interval(id="bm-init", max_intervals=1, interval=200),
             _bm_image_modal(),
