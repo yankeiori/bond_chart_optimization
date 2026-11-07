@@ -194,6 +194,27 @@ class TestUsageStats:
         assert by_id[2]["count"] == 0  # 管理者だけが登録した衣装
         assert by_id[2]["avg"] is None
 
+    def test_rank_distribution(self):
+        stats = compute_usage_stats(_users(), _COSTUMES, _NOW)
+        labels = [b["label"] for b in stats["rank_hist"]]
+        by_id = {c["costume_id"]: c for c in stats["by_costume"]}
+        # アル通常: 50, 20, 40
+        hist1 = dict(zip(labels, by_id[1]["hist"]))
+        assert hist1["20〜29"] == 1
+        assert hist1["40〜49"] == 1
+        assert hist1["50〜59"] == 1
+        assert sum(by_id[1]["hist"]) == by_id[1]["count"] == 3
+        # 同じ生徒の衣装の合計（アル: 通常 50, 20, 40 + ドレス 100）
+        by_name = {s["student_name"]: s for s in stats["by_student"]}
+        assert [s["student_name"] for s in stats["by_student"]] == ["アル", "ムツキ"]
+        al = by_name["アル"]
+        assert al["costumes"] == 2
+        assert al["count"] == 4
+        assert al["max"] == 100
+        assert al["over50"] == 2
+        assert dict(zip(labels, al["hist"]))["100"] == 1
+        assert by_name["ムツキ"]["hist"][0] == 1  # 1〜9
+
     def test_daily_new_in_jst(self):
         stats = compute_usage_stats(_users(), _COSTUMES, _NOW)
         daily = stats["daily_new"]
@@ -207,6 +228,7 @@ class TestUsageStats:
         stats = compute_usage_stats([], _COSTUMES, _NOW)
         assert stats["summary"]["avg_count"] is None
         assert stats["daily_new"] == []
+        assert all(sum(s["hist"]) == 0 for s in stats["by_student"])
 
 
 class TestDashboard:
@@ -224,6 +246,8 @@ class TestDashboard:
         assert "除いています" not in page  # 既定では管理者も数える
         assert '<span class="tag">管理者</span>' in page
         assert 'class="active">ダッシュボード' in page
+        assert 'id="dist-costume-table"' in page
+        assert 'id="dist-student-table"' in page
         assert "schaledb" not in page.lower()
 
     def test_exclude_admin(self, dash_client):
