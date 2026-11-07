@@ -24,7 +24,13 @@ from app.backend.accounts import (
 )
 from app.backend.auth import same_origin
 from app.backend.student import BOND_RANGES
-from app.backend.usage_stats import JST, RECENT_DAYS, compute_usage_stats
+from app.backend.usage_stats import (
+    JST,
+    RANK_BUCKETS,
+    RECENT_DAYS,
+    bucket_label,
+    compute_usage_stats,
+)
 from app.backend.user_presets import (
     VALID_PRESENT_TIERS,
     VALID_STATUS_NAMES,
@@ -342,6 +348,7 @@ _STYLE = """
   th.sorted-asc::after { content: " ▲"; opacity: 1; }
   th.sorted-desc::after { content: " ▼"; opacity: 1; }
   .muted { color: #999; }
+  td.hist-cell { min-width: 40px; }
   .tag { display: inline-block; padding: 0 6px; border-radius: 8px;
          background: #eee; color: #555; font-size: 0.7rem; margin-left: 4px; }
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
@@ -1548,6 +1555,91 @@ def _costume_table(by_costume: list[dict]) -> str:
     </div>"""
 
 
+def _hist_cells(hist: list[int], count: int) -> str:
+    """絆ランク分布の区切りごとの件数のセル。件数の割合で背景を濃くする。"""
+    cells = ""
+    for n in hist:
+        if not n:
+            cells += (
+                '<td class="num hist-cell" data-v="0"><span class="muted">0</span></td>'
+            )
+            continue
+        share = n / count
+        cells += (
+            f'<td class="num hist-cell" data-v="{n}" title="{share:.0%}"'
+            f' style="background:rgba(74,144,217,{0.12 + 0.6 * share:.2f})">{n}</td>'
+        )
+    return cells
+
+
+def _hist_ths() -> str:
+    return "".join(_sortable_th(bucket_label(lo, hi)) for lo, hi in RANK_BUCKETS)
+
+
+def _distribution_section(by_costume: list[dict], by_student: list[dict]) -> str:
+    """生徒ごとの絆ランク分布（衣装ごと / 同じ生徒の衣装の合計を切り替え）。"""
+    costume_rows = ""
+    for c in sorted(by_costume, key=lambda c: (-c["count"], -(c["avg"] or 0))):
+        name = escape(c["student_name"])
+        cname = escape(c["costume_name"] or "（標準）")
+        costume_rows += f"""<tr data-search="{name} {cname}">
+          <td data-v="{name}">{name}</td>
+          <td data-v="{cname}">{cname}</td>
+          <td class="num" data-v="{c["count"]}">{c["count"]}</td>
+          <td class="num" data-v="{_sort_value(c["avg"])}">{_fmt_num(c["avg"])}</td>
+          {_hist_cells(c["hist"], c["count"])}
+        </tr>"""
+    student_rows = ""
+    for st in sorted(by_student, key=lambda s: (-s["count"], -(s["avg"] or 0))):
+        name = escape(st["student_name"])
+        student_rows += f"""<tr data-search="{name}">
+          <td data-v="{name}">{name}</td>
+          <td class="num" data-v="{st["costumes"]}">{st["costumes"]}</td>
+          <td class="num" data-v="{st["count"]}">{st["count"]}</td>
+          <td class="num" data-v="{_sort_value(st["avg"])}">{_fmt_num(st["avg"])}</td>
+          {_hist_cells(st["hist"], st["count"])}
+        </tr>"""
+    return f"""
+    <div class="toolbar">
+      <span>
+        <label><input type="radio" name="dist-mode" value="costume" checked
+               onchange="switchDist(this.value)"> 衣装ごと</label>
+        <label><input type="radio" name="dist-mode" value="student"
+               onchange="switchDist(this.value)"> 同じ生徒の衣装を合計</label>
+      </span>
+      <label>絞り込み: <input type="text" id="dist-filter" placeholder="生徒名・衣装名"
+             oninput="filterRows(this, 'dist-costume-table');
+                      filterRows(this, 'dist-student-table')"></label>
+      <span class="muted">セルの色は、その行の件数に占める割合です。</span>
+    </div>
+    <div class="table-wrap" id="dist-costume">
+    <table id="dist-costume-table" class="sort-table">
+      <thead><tr>
+        {_sortable_th("生徒", "text")}{_sortable_th("衣装", "text")}
+        {_sortable_th("登録人数")}{_sortable_th("平均")}{_hist_ths()}
+      </tr></thead>
+      <tbody>{costume_rows}</tbody>
+    </table>
+    </div>
+    <div class="table-wrap" id="dist-student" hidden>
+    <table id="dist-student-table" class="sort-table">
+      <thead><tr>
+        {_sortable_th("生徒", "text")}{_sortable_th("衣装数")}
+        {_sortable_th("登録件数")}{_sortable_th("平均")}{_hist_ths()}
+      </tr></thead>
+      <tbody>{student_rows}</tbody>
+    </table>
+    </div>
+    <script>
+    function switchDist(mode) {{
+      document.getElementById('dist-costume').hidden = mode !== 'costume';
+      document.getElementById('dist-student').hidden = mode !== 'student';
+    }}
+    // 戻るで開き直したときにブラウザが復元したラジオボタンの選択に合わせる
+    switchDist(document.querySelector('input[name=dist-mode]:checked').value);
+    </script>"""
+
+
 def _user_table(users: list[dict]) -> str:
     rows = ""
     for u in users:
@@ -1699,12 +1791,15 @@ def _render_dashboard(exclude_admin: bool) -> str:
     {tiles}
     <nav class="subnav" style="margin-top:14px">
       <a href="#charts">グラフ</a><a href="#costumes">生徒（衣装）別</a>
+      <a href="#distribution">生徒別の絆ランク分布</a>
       <a href="#users">利用者別</a>
     </nav>
     <h2 id="charts">グラフ</h2>
     <div class="charts">{rank_chart}{daily_chart}</div>
     <h2 id="costumes">生徒（衣装）別 — 全 {len(stats["by_costume"])} 件</h2>
     {_costume_table(stats["by_costume"])}
+    <h2 id="distribution">生徒別の絆ランク分布</h2>
+    {_distribution_section(stats["by_costume"], stats["by_student"])}
     <h2 id="users">利用者別 — 全 {len(stats["users"])} 人</h2>
     <div class="summary">ID は内部の番号です（Google アカウントの情報は表示しません）。</div>
     {_user_table(stats["users"])}
