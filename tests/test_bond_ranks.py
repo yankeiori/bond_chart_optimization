@@ -319,6 +319,33 @@ class TestBmOcrPreview:
             if hasattr(c, "id")
         )
 
+    def test_unchanged_rows_hidden(self):
+        result = {
+            "cards": [
+                {"costume_id": 1, "rank": 40, "uncertain": False},  # 変更なし
+                {"costume_id": 2, "rank": 21, "uncertain": False},
+            ]
+        }
+        data = _data({"costume_id": 1, "rank": 40}, {"costume_id": 2, "rank": 20})
+        status, preview = _bm_ocr_preview(result, data, self.OPTIONS)
+        assert "2 衣装を読み取りました" in status.children
+        assert "変更のない 1 衣装は表示していません。" in status.children
+        rows = preview[1].children
+        assert [r.children[1].children[1].id["costume"] for r in rows] == [2]
+
+    def test_uncertain_row_shown_even_if_same(self):
+        result = {"cards": [{"costume_id": 1, "rank": 40, "uncertain": True}]}
+        data = _data({"costume_id": 1, "rank": 40})
+        _, preview = _bm_ocr_preview(result, data, self.OPTIONS)
+        assert len(preview[1].children) == 1
+
+    def test_all_unchanged(self):
+        result = {"cards": [{"costume_id": 1, "rank": 40, "uncertain": False}]}
+        data = _data({"costume_id": 1, "rank": 40})
+        status, preview = _bm_ocr_preview(result, data, self.OPTIONS)
+        assert any("変更はありません" in c for c in status.children)
+        assert preview == []
+
     def test_name_mismatch_not_applied_by_default(self):
         result = {
             "cards": [
