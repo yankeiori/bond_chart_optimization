@@ -3489,6 +3489,8 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
     確認表の絆ランク欄は修正でき、空欄にした衣装は反映しない（名前が衣装と
     食い違った衣装は最初から空欄）。要確認の衣装を先に並べ、画像と見比べられるようカードの切り抜きの
     置き場所を付ける（切り抜きはブラウザ内で入れる。assets/bond_ocr.js の crops）。
+    確実に読めて現在の絆ランクと同じ衣装は反映しても変わらないので表に出さない
+    （要確認の衣装は読み間違いの可能性があるので、同じ値でも出す）。
     """
     if not isinstance(result, dict):
         raise PreventUpdate
@@ -3524,17 +3526,34 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
             f"名前が一致しなかったカード {n_dropped} 枚は読み取っていません"
             "（まだ登録されていない生徒の可能性があります）。"
         )
+    saved = {e["costume_id"]: e["rank"] for e in normalize_bond_ranks(bond_ranks)}
+    shown = [
+        e for e in entries if e["uncertain"] or e["rank"] != saved.get(e["costume_id"])
+    ]
+    n_same = len(entries) - len(shown)
+    if not shown:
+        return (
+            html.Span(
+                [
+                    f"{len(entries)} 衣装を読み取りました",
+                    "。すべて現在の絆ランクと同じで、変更はありません。",
+                    *notes,
+                ]
+            ),
+            [],
+        )
     status = html.Span(
         [
             f"{len(entries)} 衣装を読み取りました",
             f"（要確認 {n_uncertain}）" if n_uncertain else "",
-            "。内容を確認して「絆ランク管理に反映」を押してください。",
+            "。",
+            f"変更のない {n_same} 衣装は表示していません。" if n_same else "",
+            "内容を確認して「絆ランク管理に反映」を押してください。",
             *notes,
         ]
     )
-    saved = {e["costume_id"]: e["rank"] for e in normalize_bond_ranks(bond_ranks)}
     rows = []
-    for e in sorted(entries, key=lambda e: not e["uncertain"]):
+    for e in sorted(shown, key=lambda e: not e["uncertain"]):
         cid = e["costume_id"]
         note = []
         if e["uncertain"]:
