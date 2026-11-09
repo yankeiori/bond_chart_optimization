@@ -2,7 +2,7 @@
 #    uv export --no-dev --no-hashes -o requirements.txt
 annotated-types==0.8.0
     # via pydantic
-authlib==1.9.2
+authlib==1.9.5
     # via bond-chart-optimization
 blinker==1.9.0
     # via flask
@@ -12,7 +12,7 @@ cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via cryptography
 charset-normalizer==3.5.2
     # via requests
-click==8.5.0
+click==8.5.1
     # via flask
 comm==0.2.3
     # via dash
@@ -36,7 +36,7 @@ janus==2.0.0
     # via dash
 jinja2==3.1.6
     # via flask
-joserfc==1.7.7
+joserfc==1.8.0
     # via authlib
 markupsafe==3.0.4
     # via
@@ -61,9 +61,9 @@ psycopg2-binary==2.9.13
     # via bond-chart-optimization
 pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
-pydantic==2.14.2
+pydantic==2.14.3
     # via dash
-pydantic-core==2.50.2
+pydantic-core==2.50.4
     # via pydantic
 pyscipopt==6.3.0
     # via bond-chart-optimization
@@ -81,7 +81,7 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   typing-inspection
-typing-inspection==0.4.4
+typing-inspection==0.4.5
     # via pydantic
 urllib3==2.8.0
     # via requests
