@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Blue Archive Wiki の生徒画像を assets/student/<表示名>.png に保存する。
+"""Blue Archive Wiki の生徒画像を assets/student/<表示名>.webp に保存する。
 
 画像は https://bluearchive.wiki/wiki/Characters の一覧表にある生徒画像
 （コレクション画像）の縮小版。衣装は DB の表示名「生徒名（衣装名）」
 （通常衣装は生徒名のみ）で SchaleDB の日本語名と照合し、同じ Id の
 英語名を Wiki の表記に直して一覧表の行を引く。costume.id はローカルと
 本番で違うので、ファイル名には表示名を使う。
+
+画像は配信量を抑えるため WebP（画質 85）に変換して保存する（Pillow が必要:
+`uv sync` で開発用依存として入る）。画質 85 でも絆ランクのスクショ読み取りの
+照合結果は PNG と変わらないことを ocr_sample で確認済み。
 
 既に画像がある衣装は取得しない（--force で取り直す）。
 デフォルトはドライラン（照合結果の表示のみ）。--apply を付けると保存する。
@@ -23,6 +27,7 @@
 
 import argparse
 import html
+import io
 import json
 import os
 import re
@@ -39,6 +44,8 @@ _OUT_DIR = _BASE_DIR / "assets" / "student"
 _WIKI_URL = "https://bluearchive.wiki/wiki/Characters"
 _SCHALE_URL = "https://schaledb.com/data/"
 _USER_AGENT = "Mozilla/5.0 (bond-chart-optimization student icon fetcher)"
+# WebP の画質（スクショ読み取りの照合を ocr_sample で確認した値）
+_WEBP_QUALITY = 85
 # 保存する画像の幅（元画像は 404x456）。表示 32px の 2 倍
 _WIDTH = 64
 
@@ -140,6 +147,13 @@ def load_labels(db_url: str) -> list[str]:
         conn.close()
 
 
+def _save_webp(data: bytes, path: Path) -> None:
+    """取得した画像（PNG 等）を WebP に変換して保存する。"""
+    from PIL import Image  # 開発用依存（このスクリプトでしか使わない）
+
+    Image.open(io.BytesIO(data)).save(path, "WEBP", quality=_WEBP_QUALITY, method=6)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Blue Archive Wiki の生徒画像を assets/student に保存する"
@@ -168,7 +182,7 @@ def main():
 
     todo, missing = [], []
     for label in labels:
-        path = _OUT_DIR / f"{label}.png"
+        path = _OUT_DIR / f"{label}.webp"
         if path.exists() and not args.force:
             continue
         name = wiki_names.get(label)
@@ -190,7 +204,7 @@ def main():
         return 0
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
     for label, _, url, path in todo:
-        path.write_bytes(_get(url))
+        _save_webp(_get(url), path)
         time.sleep(0.2)
     print(f"\n保存しました: {len(todo)} 件 -> {_OUT_DIR.relative_to(_BASE_DIR)}")
     return 0

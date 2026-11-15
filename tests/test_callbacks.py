@@ -293,7 +293,7 @@ class TestGsFurnitureCell:
 class TestWithStudentIcon:
     def test_icon_before_label(self):
         icon, text = _with_student_icon("ホシノ（水着）")
-        assert icon.src == "/assets/student/" + quote("ホシノ（水着）") + ".png"
+        assert icon.src == "/assets/student/" + quote("ホシノ（水着）") + ".webp"
         assert text == "ホシノ（水着）"
 
     def test_custom_text(self):
