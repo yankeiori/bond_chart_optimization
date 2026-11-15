@@ -29,6 +29,9 @@ app = Dash(
     # （/assets/ からの配信はされる）
     assets_ignore=r"^admin_",
     suppress_callback_exceptions=True,
+    # JS・CSS・コールバック応答を gzip/brotli 圧縮して配信する（flask-compress）。
+    # 転送量がおおむね 1/4〜1/10 になり、Render の帯域を節約できる。
+    compress=True,
     title=SITE_NAME,
     update_title=None,
     meta_tags=[

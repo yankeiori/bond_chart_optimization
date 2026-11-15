@@ -16,10 +16,14 @@ application.layout = create_root_layout
 
 
 # Dash 内部エンドポイント (/_dash-layout 等) のキャッシュを無効化
-# CDN/ブラウザが古いレイアウトを返すのを防ぐ
+# CDN/ブラウザが古いレイアウトを返すのを防ぐ。
+# /_dash-component-suites/ (Dash の JS 本体) はバージョン入りの URL で Dash が
+# 長期キャッシュを指定するため対象外にする（無効化すると訪問のたびに約 1MB を
+# 再ダウンロードし、Render の帯域を圧迫する）。
 @application.server.after_request
 def _no_cache_dash_endpoints(response):
-    if "/_dash-" in (request.path or ""):
+    path = request.path or ""
+    if "/_dash-" in path and "/_dash-component-suites/" not in path:
         response.headers["Cache-Control"] = (
             "no-store, no-cache, must-revalidate, max-age=0"
         )
