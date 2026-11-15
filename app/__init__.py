@@ -1,3 +1,4 @@
+import mimetypes
 import os
 import sys
 from datetime import timedelta
@@ -5,6 +6,10 @@ from pathlib import Path
 
 from dash import Dash
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+# Python 3.12 の mimetypes は .webp を知らない環境があり（OS の mime.types 次第）、
+# 生徒画像が application/octet-stream で配信されてしまうため登録しておく。
+mimetypes.add_type("image/webp", ".webp")
 
 # PyInstaller バンドル時は _MEIPASS、通常時はプロジェクトルート
 if getattr(sys, "frozen", False):

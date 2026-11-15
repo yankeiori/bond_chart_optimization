@@ -983,7 +983,7 @@ function _bondOcr_loadRefs(refs) {
     if (!_bondOcr_refsPromise) {
         _bondOcr_refsPromise = Promise.all(refs.map(function (r) {
             if (!r[2]) return null;
-            return _bondOcr_loadImage("/assets/student/" + encodeURIComponent(r[1]) + ".png")
+            return _bondOcr_loadImage("/assets/student/" + encodeURIComponent(r[1]) + ".webp")
                 .then(function (im) {
                     return { id: r[0], label: r[1], feature: _bondOcr_iconFeature(_bondOcr_imageData(im)) };
                 }, function () { return null; });

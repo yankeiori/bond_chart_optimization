@@ -29,7 +29,7 @@ function _bondImage_loadIcon(label) {
         var im = new Image();
         im.onload = function () { resolve(im); };
         im.onerror = function () { resolve(null); };
-        im.src = "/assets/student/" + encodeURIComponent(label) + ".png";
+        im.src = "/assets/student/" + encodeURIComponent(label) + ".webp";
     });
 }
 
