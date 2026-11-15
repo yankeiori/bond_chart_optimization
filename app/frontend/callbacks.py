@@ -189,14 +189,14 @@ def gs_update_status_radio(dropdown_value, autosave_data):
 
 # 生徒画像（scripts/fetch_student_icons.py で取得）。ファイル名は衣装の表示名
 _STUDENT_ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "student"
-_STUDENT_ICONS = {p.stem for p in _STUDENT_ICON_DIR.glob("*.png")}
+_STUDENT_ICONS = {p.stem for p in _STUDENT_ICON_DIR.glob("*.webp")}
 
 
 def _student_icon_src(label: str) -> str | None:
     """衣装の表示名 label の生徒画像の URL。画像が無い衣装は None。"""
     if label not in _STUDENT_ICONS:
         return None
-    return f"/assets/student/{quote(label)}.png"
+    return f"/assets/student/{quote(label)}.webp"
 
 
 def _student_icon(label: str, size: int = 32):

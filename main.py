@@ -32,6 +32,22 @@ def _no_cache_dash_endpoints(response):
     return response
 
 
+# 生徒・贈り物・リアクションのアイコンは URL にバージョンが入らないため、
+# Dash の既定では no-cache（訪問のたびに数百枚分の確認通信）になる。
+# 差し替えはまれなので 7 日間キャッシュさせる（差し替え後、最大 7 日は古い画像が出る）。
+ICON_CACHE_PREFIXES = ("/assets/student/", "/assets/gift/", "/assets/reaction/")
+ICON_CACHE_CONTROL = "public, max-age=604800"
+
+
+@application.server.after_request
+def _cache_icons(response):
+    if response.status_code in (200, 304) and (request.path or "").startswith(
+        ICON_CACHE_PREFIXES
+    ):
+        response.headers["Cache-Control"] = ICON_CACHE_CONTROL
+    return response
+
+
 # ===========================================================================
 # クライアントサイドコールバック
 # ===========================================================================
