@@ -7,6 +7,7 @@ load_dotenv()
 from dash import ALL, MATCH, ClientsideFunction, Input, Output, State
 from flask import redirect, request, send_from_directory
 from app import app as application
+from app.backend.icons import version_for_path
 from app.frontend.layout import ROOT_REDIRECT, create_root_layout
 import app.frontend.callbacks  # noqa: F401 - コールバック登録
 import app.backend.admin  # noqa: F401 - 管理画面登録
@@ -95,8 +96,10 @@ def _no_cache_dash_endpoints(response):
 
 # 生徒・贈り物・リアクションのアイコンは、Dash の既定では no-cache（訪問のたびに
 # 数百枚分の確認通信）になる。ページが使う URL には内容のハッシュ ?v=...
-# （app/backend/icons.py）が付き、差し替えると URL が変わるので、v 付きは
-# LONG_CACHE_CONTROL（1 年・immutable）にする。v の無い URL は 7 日間
+# （app/backend/icons.py）が付き、差し替えると URL が変わるので、v が今の画像の版と
+# 一致するときは LONG_CACHE_CONTROL（1 年・immutable）にする。一致しない v（古い
+# ページの URL や、デプロイの切り替わりで古いサーバーに届いた新しい URL）は、
+# 違う画像を長く残さないよう毎回確かめさせる。v の無い URL は 7 日間
 # （差し替え後、最大 7 日は古い画像が出る）。
 ICON_CACHE_PREFIXES = ("/assets/student/", "/assets/gift/", "/assets/reaction/")
 ICON_CACHE_CONTROL = "public, max-age=604800"
@@ -104,12 +107,18 @@ ICON_CACHE_CONTROL = "public, max-age=604800"
 
 @application.server.after_request
 def _cache_icons(response):
-    if response.status_code in (200, 304) and (request.path or "").startswith(
+    path = request.path or ""
+    if response.status_code not in (200, 304) or not path.startswith(
         ICON_CACHE_PREFIXES
     ):
-        response.headers["Cache-Control"] = (
-            LONG_CACHE_CONTROL if request.args.get("v") else ICON_CACHE_CONTROL
-        )
+        return response
+    version = request.args.get("v")
+    if not version:
+        response.headers["Cache-Control"] = ICON_CACHE_CONTROL
+    elif version == version_for_path(path):
+        response.headers["Cache-Control"] = LONG_CACHE_CONTROL
+    else:
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 

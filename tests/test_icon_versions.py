@@ -15,7 +15,13 @@ import app.backend.admin as admin
 import app.frontend.callbacks as callbacks
 import main  # noqa: F401 - after_request の登録
 from app import app
-from app.backend.icons import ICON_EXTS, ICON_VERSIONS, file_versions, icon_src
+from app.backend.icons import (
+    ICON_EXTS,
+    ICON_VERSIONS,
+    file_versions,
+    icon_src,
+    version_for_path,
+)
 from app.backend.user_presets import gift_image_src
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -136,6 +142,25 @@ def test_unversioned_icon_is_cached_for_a_week(client, folder, query):
     response = client.get(url)
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "public, max-age=604800"
+
+
+@pytest.mark.parametrize("folder", _FOLDERS)
+def test_mismatched_version_is_not_long_cached(client, folder):
+    # 古いページの URL や、デプロイの切り替わりで古いサーバーに届いた新しい URL は、
+    # 違う画像を 1 年残さないよう毎回確かめさせる
+    url = icon_src(folder, _first_name(folder)).split("?")[0] + "?v=deadbeef"
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-cache"
+
+
+def test_version_for_path():
+    name = _first_name("gift")
+    assert version_for_path(f"/assets/gift/{name}.webp") == ICON_VERSIONS["gift"][name]
+    assert version_for_path(f"/assets/gift/{name}.png") is None
+    assert version_for_path("/assets/gift/存在しない.webp") is None
+    assert version_for_path("/assets/style.css") is None
+    assert version_for_path(f"/assets/gift/sub/{name}.webp") is None
 
 
 def test_missing_versioned_icon_is_not_cached(client):
