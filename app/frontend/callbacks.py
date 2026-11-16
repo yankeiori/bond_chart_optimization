@@ -72,7 +72,6 @@ from app.frontend.layout import (
     _default_costume_name,
     PAGES,
     EXTRA_PAGES,
-    ROOT_REDIRECT,
     create_layout,
     build_gs_gift_list,
     gs_default_used,
@@ -82,17 +81,7 @@ from app.frontend.layout import (
 )
 
 
-@callback(
-    Output("url", "pathname"),
-    Input("url", "pathname"),
-)
-def redirect_root(pathname):
-    """ルート (/) を計算機ページへリダイレクトする。"""
-    if pathname == "/":
-        return ROOT_REDIRECT
-    raise PreventUpdate
-
-
+# ルート (/) から計算機ページへの転送は main.py（サーバーの 302 とクライアントサイド）。
 @callback(
     Output("page-content", "children"),
     Input("url", "pathname"),
@@ -3504,14 +3493,12 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
         e for e in merge_ocr_cards(result.get("cards")) if e["costume_id"] in labels
     ]
     notes = []
-    if result.get("failed"):
-        notes.append(
-            f"生徒のカードが見つからなかった画像が {result['failed']} 枚あります。"
-        )
-    if result.get("partial"):
-        notes.append(
-            f"画面の端で切れていたカード {result['partial']} 枚は読み取っていません。"
-        )
+    failed = _ocr_count(result.get("failed"))
+    partial = _ocr_count(result.get("partial"))
+    if failed:
+        notes.append(f"生徒のカードが見つからなかった画像が {failed} 枚あります。")
+    if partial:
+        notes.append(f"画面の端で切れていたカード {partial} 枚は読み取っていません。")
     if not entries:
         return (
             html.Span(
@@ -3641,6 +3628,18 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
 def bm_ocr_preview(result, bond_ranks):
     """スクリーンショットの読み取り結果を確認表にする。"""
     return _bm_ocr_preview(result, bond_ranks, get_costume_options())
+
+
+# 読み取り結果の枚数の上限（ブラウザからの値なので検証する。細工した値をそのまま
+# 返すと、応答が大きくなる）。
+_OCR_COUNT_MAX = 100_000
+
+
+def _ocr_count(value) -> int:
+    """読み取り結果の枚数（failed・partial）。整数でなければ 0、上限で切る。"""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return max(0, min(value, _OCR_COUNT_MAX))
 
 
 def _bm_ocr_apply(ocr_values, ocr_ids, rank_values, rank_ids):

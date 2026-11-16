@@ -5,14 +5,75 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from dash import ALL, MATCH, ClientsideFunction, Input, Output, State
-from flask import request
+from flask import redirect, request, send_from_directory
 from app import app as application
-from app.frontend.layout import create_root_layout
+from app.frontend.layout import ROOT_REDIRECT, create_root_layout
 import app.frontend.callbacks  # noqa: F401 - コールバック登録
 import app.backend.admin  # noqa: F401 - 管理画面登録
 import app.backend.auth  # noqa: F401 - ログイン登録
 
 application.layout = create_root_layout
+
+# 中身が変わると URL も変わる配信物に付ける長期キャッシュ（再検証もさせない）。
+LONG_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+@application.server.before_request
+def _guard_requests():
+    path = request.path or ""
+    # 正規の Dash の画面はコールバックの本文を圧縮して送らない。圧縮した本文は Dash が
+    # 展開後 64 MB まで受け付けるため、小さなリクエストで巨大な応答を返させる悪用
+    # （帯域の増幅）に使える。受け付けずに断る。
+    if path == "/_dash-update-component" and request.headers.get("Content-Encoding"):
+        return "Content-Encoding is not supported", 415
+    # ルート (/) は計算機ページへ。ブラウザ側で書き換えるとページ全体を 2 回
+    # 読み込むことになるので、サーバーで転送する。
+    if path == "/":
+        query = request.query_string.decode()
+        return redirect(ROOT_REDIRECT + (f"?{query}" if query else ""), 302)
+    return None
+
+
+# URL に版が入っている配信物を長期キャッシュにする。
+# - /assets の ?m= は Dash がファイルの mtime から付ける。本番では mtime を中身から
+#   決めている（app/caching.py）ので、中身が変わったときだけ URL が変わる。
+# - /_dash-component-suites/ は Dash が版入りの URL に 1 年のキャッシュを付ける。
+#   immutable を足して、再読み込みでの再検証（Firefox・Safari）もさせない。
+@application.server.after_request
+def _cache_versioned_files(response):
+    if response.status_code not in (200, 304):
+        return response
+    path = request.path or ""
+    if request.endpoint == "_dash_assets.static" and "m" in request.args:
+        response.headers["Cache-Control"] = LONG_CACHE_CONTROL
+    elif (
+        path.startswith("/_dash-component-suites/")
+        and response.cache_control.max_age == 31536000
+    ):
+        response.headers["Cache-Control"] = LONG_CACHE_CONTROL
+    return response
+
+
+# クローラーが取りに来る /robots.txt と、<link rel="icon"> の無いページ（管理画面など）で
+# ブラウザが取りに来る /favicon.ico。無いと Dash がページの HTML（約 14 KB）を返してしまう。
+@application.server.route("/robots.txt")
+def _robots_txt():
+    body = "User-agent: *\nDisallow: /admin\nDisallow: /auth/\n"
+    return (
+        body,
+        200,
+        {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "public, max-age=86400",
+        },
+    )
+
+
+@application.server.route("/favicon.ico")
+def _favicon_ico():
+    return send_from_directory(
+        application.config.assets_folder, "favicon.ico", max_age=604800
+    )
 
 
 # Dash 内部エンドポイント (/_dash-layout 等) のキャッシュを無効化
@@ -51,6 +112,20 @@ def _cache_icons(response):
 # ===========================================================================
 # クライアントサイドコールバック
 # ===========================================================================
+
+
+# --- アプリ内で / に来たときは計算機ページへ（サーバーへの往復なし） ---
+# 直接 / を開いた場合は _guard_requests が 302 で転送する。dcc.Location は
+# refresh="callback-nav" なので、ここで書き換えてもページ全体は読み直さない。
+application.clientside_callback(
+    f"""
+    function(pathname) {{
+        return pathname === "/" ? "{ROOT_REDIRECT}" : window.dash_clientside.no_update;
+    }}
+    """,
+    Output("url", "pathname"),
+    Input("url", "pathname"),
+)
 
 
 # --- 絆ランク増減ボタン ---
