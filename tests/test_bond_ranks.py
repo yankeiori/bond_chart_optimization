@@ -495,7 +495,7 @@ class TestBsBinSize:
         out = bs_bin_size(5, [3, 48])
         bars = self._find(out, "bs-hist-bar")
         # 衣装のいる区間だけ棒を描く。横軸 1〜100 に対する % で位置・幅を決める
-        assert [b.title for b in bars] == [
+        assert [b.to_plotly_json()["props"]["aria-label"] for b in bars] == [
             "絆ランク 1〜4: 1 衣装",
             "絆ランク 45〜49: 1 衣装",
         ]
@@ -511,6 +511,28 @@ class TestBsBinSize:
         assert xlabels.children[0].children == "1"
         assert xlabels.children[0].style["left"] == "0.500%"
         assert xlabels.children[-1].style["left"] == "99.500%"
+
+    def test_counts_are_visible_without_hover(self):
+        # 5・10ごとは衣装数を棒の上に出す（タッチ端末でも読める）
+        out = bs_bin_size(10, [1, 2, 3, 50])
+        counts = self._find(out, "bs-hist-count")
+        assert [c.children for c in counts] == ["3", "1"]
+        (plot,) = self._find(out, "bs-hist-plot")
+        assert "bs-hist-fine" not in plot.className
+
+    def test_fine_bins_show_counts_on_tap(self):
+        # 1ごとは棒が細いので、タップ（フォーカス）で吹き出しを出す（style.css）
+        out = bs_bin_size(1, [3, 3, 99])
+        assert self._find(out, "bs-hist-count") == []
+        (plot,) = self._find(out, "bs-hist-plot")
+        assert "bs-hist-fine" in plot.className
+        bars = self._find(out, "bs-hist-bar")
+        props = [b.to_plotly_json()["props"] for b in bars]
+        assert [p["tabIndex"] for p in props] == ["0", "0"]
+        assert [p["data-label"] for p in props] == ["3: 2 衣装", "99: 1 衣装"]
+        # 端の棒は吹き出しを内側へ寄せる
+        assert "bs-hist-bar-l" in bars[0].className
+        assert "bs-hist-bar-r" in bars[1].className
 
     def test_chart_height_is_relative_to_top_tick(self):
         bars = self._find(bs_bin_size(10, [1, 2, 3, 50]), "bs-hist-bar")

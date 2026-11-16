@@ -260,6 +260,14 @@ class TestSiteHeader:
         _, builder = {**PAGES, **EXTRA_PAGES}[path]
         assert "schaledb" not in str(builder()).lower()
 
+    def test_manual_does_not_mention_schaledb(self):
+        # マニュアルは初めて開いたときに描く（render_manual）ので、ページの
+        # レイアウトの検査とは別に、表示される本文を確かめる
+        from app.frontend.callbacks import render_manual
+
+        body, _ = render_manual(1, None)
+        assert "schaledb" not in str(body).lower()
+
     @pytest.mark.parametrize("path", list({**PAGES, **EXTRA_PAGES}.keys()))
     def test_pages_have_unofficial_footer(self, path):
         # 全ページのフッターに非公式である旨と「このサイトについて」へのリンク

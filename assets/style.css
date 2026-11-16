@@ -1256,8 +1256,8 @@ input[type="number"] {
 .bs-hist {
     position: relative;
     max-width: 760px;
-    /* 上: 絆ボーナス上限のラベル、左: 縦軸のタイトルと目盛り */
-    padding: 24px 10px 0 46px;
+    /* 上: 衣装数（棒の上）と絆ボーナス上限のラベル、左: 縦軸のタイトルと目盛り */
+    padding: 36px 10px 0 46px;
     margin-top: 8px;
     font-size: 0.75rem;
     color: #4b5563;
@@ -1270,7 +1270,7 @@ input[type="number"] {
 .bs-hist-ytitle {
     position: absolute;
     left: 9px;
-    top: calc(24px + 100px); /* 上の余白 + 描画域の高さの半分 */
+    top: calc(36px + 100px); /* 上の余白 + 描画域の高さの半分 */
     transform: translate(-50%, -50%) rotate(-90deg);
     white-space: nowrap;
 }
@@ -1297,8 +1297,53 @@ input[type="number"] {
     /* 隣の棒との境目 */
     box-shadow: inset -1px 0 #fff;
 }
-.bs-hist-bar:hover {
+.bs-hist-bar:hover,
+.bs-hist-bar:focus {
     background: #2f6fb5;
+    outline: none;
+}
+/* 衣装数（5・10ごと）: 棒のすぐ上 */
+.bs-hist-count {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 1px;
+    font-size: 0.65rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    color: #374151;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+/* 衣装数（1ごと）: 棒をタップ（フォーカス）するかカーソルを合わせたときの吹き出し */
+.bs-hist-fine .bs-hist-bar:hover::after,
+.bs-hist-fine .bs-hist-bar:focus::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #374151;
+    color: #fff;
+    font-size: 0.7rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    z-index: 2;
+    pointer-events: none;
+}
+.bs-hist-fine .bs-hist-bar-l:hover::after,
+.bs-hist-fine .bs-hist-bar-l:focus::after {
+    left: 0;
+    transform: none;
+}
+.bs-hist-fine .bs-hist-bar-r:hover::after,
+.bs-hist-fine .bs-hist-bar-r:focus::after {
+    left: auto;
+    right: 0;
+    transform: none;
 }
 /* 絆ボーナス上限の点線 */
 .bs-hist-cap {
@@ -1311,7 +1356,8 @@ input[type="number"] {
 }
 .bs-hist-cap > span {
     position: absolute;
-    bottom: calc(100% + 4px);
+    /* 棒の上の衣装数（最大で描画域の上端のすぐ上）より上に置く */
+    bottom: calc(100% + 16px);
     left: 0;
     transform: translateX(-50%);
     white-space: nowrap;

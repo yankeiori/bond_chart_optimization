@@ -3330,11 +3330,15 @@ def _bs_hist_chart(ranks: list[int], size: int) -> list:
 
     区間ごとに集計して棒の幅を区間の幅に合わせる（端の区間は 1〜9・100
     のように短い）。横軸は 1〜100 に固定する。plotly を読み込まないよう
-    HTML/CSS の棒で描き、衣装数は棒の title（ホバー）で出す。
+    HTML/CSS の棒で描く。衣装数は、区切りが広い（5・10ごと）ときは棒の上に
+    出し、1ごとは棒が細いので、棒をタップ（フォーカス）するかカーソルを
+    合わせたときに吹き出しで出す（style.css。タッチ端末でも見られるように
+    title は使わない）。
     """
     bins = _bs_hist_bins(ranks, size)
     ticks = _bs_count_ticks(max((b["count"] for b in bins), default=0))
     top = ticks[-1]
+    fine = size < 5
     grid = [
         html.Div(
             html.Span(str(v)),
@@ -3343,19 +3347,28 @@ def _bs_hist_chart(ranks: list[int], size: int) -> list:
         )
         for v in ticks
     ]
-    bars = [
-        html.Div(
-            className="bs-hist-bar",
-            title=f"絆ランク {b['label']}: {b['count']} 衣装",
+
+    def bar(b: dict) -> html.Div:
+        # 吹き出しが描画域の外へはみ出さないよう、左右の端では寄せる向きを変える
+        side = " bs-hist-bar-l" if b["lo"] <= 10 else ""
+        side = " bs-hist-bar-r" if b["hi"] >= 90 else side
+        return html.Div(
+            None if fine else html.Span(str(b["count"]), className="bs-hist-count"),
+            className="bs-hist-bar" + side,
+            role="img",
+            tabIndex="0" if fine else None,
             style={
                 "left": _bs_pct(b["lo"] - MIN_RANK),
                 "width": _bs_pct(b["hi"] - b["lo"] + 1),
                 "height": f"{b['count'] / top * 100:.3f}%",
             },
+            **{
+                "aria-label": f"絆ランク {b['label']}: {b['count']} 衣装",
+                "data-label": f"{b['label']}: {b['count']} 衣装",
+            },
         )
-        for b in bins
-        if b["count"]
-    ]
+
+    bars = [bar(b) for b in bins if b["count"]]
     cap = html.Div(
         html.Span(f"絆ボーナス上限（{BONUS_MAX_RANK}）"),
         className="bs-hist-cap",
@@ -3363,7 +3376,10 @@ def _bs_hist_chart(ranks: list[int], size: int) -> list:
     )
     return [
         html.Div("衣装数", className="bs-hist-ytitle"),
-        html.Div([*grid, *bars, cap], className="bs-hist-plot"),
+        html.Div(
+            [*grid, *bars, cap],
+            className="bs-hist-plot" + (" bs-hist-fine" if fine else ""),
+        ),
         html.Div(
             [
                 html.Span(str(v), style={"left": _bs_pct(v - MIN_RANK + 0.5)})
@@ -3462,7 +3478,8 @@ def _bs_render(bond_ranks, options: list[dict]):
             hist,
             title="絆ランクの分布",
             hint="10ごとなら 1〜9・10〜19・…・90〜99・100 で区切ります。"
-            "棒にカーソルを合わせると衣装数が出ます。",
+            "衣装数は棒の上に出ます（1ごとでは、棒をタップするかカーソルを"
+            "合わせると出ます）。",
         ),
         panel(
             near,
