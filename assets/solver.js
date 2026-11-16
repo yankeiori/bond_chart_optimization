@@ -330,6 +330,403 @@ function _solver_dataTable(props) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  階段状の折れ線グラフ（経験値 vs 絆ボーナス合計）                      */
+/*  plotly（約1.4MB）を読み込まないよう自前で描く。文字は HTML、線は      */
+/*  SVG 画像。横方向は % で配置するので、画面幅が変わっても文字の大きさは  */
+/*  変わらず、線の画像だけが伸び縮みする（線の太さは変わらない）。幅が     */
+/*  大きく変わったときは描き直す（下の resize）。                          */
+/* ------------------------------------------------------------------ */
+
+var _SOLVER_GRAPH_H = 380; // グラフ全体の高さ (px)
+var _SOLVER_GRAPH_PAD = 4; // 端の線が切れないよう、線の画像を描画域より広げる幅 (px)
+var _SOLVER_GRAPH_FONT =
+    '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", ' +
+    '"Yu Gothic", YuGothic, Meiryo, sans-serif';
+
+/** 目盛りのラベル（3桁区切り） */
+function _solver_fmtNum(v) {
+    return Number(v).toLocaleString("ja-JP");
+}
+
+/** 小数1桁に丸める（SVG の座標を短くする） */
+function _solver_r1(v) {
+    return Math.round(v * 10) / 10;
+}
+
+/** 0〜1 の割合を CSS の % にする */
+function _solver_pct(f) {
+    return Math.round(f * 100000) / 1000 + "%";
+}
+
+/**
+ * lo〜hi のきりのよい目盛り（間隔は 1・2・2.5・5 × 10^n の整数）。
+ * 隣の目盛りとの距離が minGap(ラベルの最大文字数) px 以上になる、
+ * 最も細かい間隔を選ぶ。
+ */
+function _solver_niceTicks(lo, hi, lengthPx, minGap) {
+    var span = hi - lo;
+    var mults = [1, 2, 2.5, 5];
+    for (var mag = 1; mag < 1e15; mag *= 10) {
+        for (var mi = 0; mi < mults.length; mi++) {
+            var step = mults[mi] * mag;
+            if (step !== Math.floor(step)) continue;
+            var first = Math.ceil(lo / step) * step;
+            var last = Math.floor(hi / step) * step;
+            var chars = Math.max(
+                _solver_fmtNum(first).length,
+                _solver_fmtNum(last).length
+            );
+            if (step >= span || (step / span) * lengthPx >= minGap(chars)) {
+                var ticks = [];
+                for (var v = first; v <= hi; v += step) ticks.push(v);
+                return ticks;
+            }
+        }
+    }
+    return [lo];
+}
+
+/** 階段状（横 → 縦）の折れ線の SVG パス */
+function _solver_stepPath(xs, ys, X, Y) {
+    var n = Math.min(xs.length, ys.length);
+    var d = "M" + X(xs[0]) + " " + Y(ys[0]);
+    for (var i = 1; i < n; i++) {
+        d += "H" + X(xs[i]);
+        if (ys[i] !== ys[i - 1]) d += "V" + Y(ys[i]);
+    }
+    return d;
+}
+
+/** 結果エリアの幅 (px)。グラフの余白・目盛りの数を決めるのに使う */
+function _solver_graphWidth() {
+    var el = document.getElementById("chart-result");
+    if (!el || !el.clientWidth) return 800;
+    var cs = window.getComputedStyle(el);
+    var w =
+        el.clientWidth -
+        (parseFloat(cs.paddingLeft) || 0) -
+        (parseFloat(cs.paddingRight) || 0);
+    return Math.max(w, 260);
+}
+
+// 直近に描いたグラフ { opts, width }（画面幅が変わったときの描き直しに使う）
+var _solver_lastGraph = null;
+
+/**
+ * 階段状の折れ線グラフのコンポーネント（id="bond-graph"）。
+ *   opts.series: [{name, xs, ys, color, width, fill(省略可)}]（後ろほど手前に描く）
+ *   opts.vlines: [{x, label}]（点線の縦線と、その上の番号）
+ *   opts.title / opts.xTitle / opts.yTitle / opts.alt
+ * 横軸は 0〜最大値、縦軸は最小値〜最大値。
+ */
+function _solver_stepChart(opts) {
+    var H = _SOLVER_GRAPH_H;
+    var P = _SOLVER_GRAPH_PAD;
+    var W = _solver_graphWidth();
+    _solver_lastGraph = { opts: opts, width: W };
+    var series = opts.series;
+    var xMin = 0;
+    var xMax = 0;
+    var yMin = Infinity;
+    var yMax = -Infinity;
+    series.forEach(function (s) {
+        s.xs.forEach(function (x) {
+            if (x > xMax) xMax = x;
+        });
+        s.ys.forEach(function (y) {
+            if (y < yMin) yMin = y;
+            if (y > yMax) yMax = y;
+        });
+    });
+    if (!isFinite(yMin)) {
+        yMin = 0;
+        yMax = 1;
+    }
+    if (!(xMax > xMin)) xMax = xMin + 1;
+    if (!(yMax > yMin)) yMax = yMin + 1;
+
+    // 余白: 上 T（タイトル・凡例・縦線の番号）、下 B（横軸）、左 L（縦軸）、右 R
+    var B = 40;
+    var R = 16;
+    var yTicks = _solver_niceTicks(yMin, yMax, H - 84 - B, function () {
+        return 30;
+    });
+    var yChars = 1;
+    yTicks.forEach(function (v) {
+        yChars = Math.max(yChars, _solver_fmtNum(v).length);
+    });
+    var L = Math.ceil(30 + yChars * 6.5);
+    var plotW = Math.max(W - L - R, 100);
+    var xTicks = _solver_niceTicks(xMin, xMax, plotW, function (chars) {
+        return chars * 6.5 + 36;
+    });
+    function fx(x) {
+        return (x - xMin) / (xMax - xMin);
+    }
+
+    // 縦線の番号は、前の番号と近いときは上の段にずらす（最大3段。どの段も
+    // 空いていなければ一番空いている段）
+    var rowEnd = [-Infinity, -Infinity, -Infinity];
+    var rows = 1;
+    var vlines = opts.vlines.map(function (v) {
+        var px = fx(v.x) * plotW;
+        var half = (String(v.label).length * 6 + 2) / 2;
+        var row = -1;
+        for (var r = 0; r < rowEnd.length && row < 0; r++) {
+            if (px - half >= rowEnd[r] + 6) row = r;
+        }
+        if (row < 0) row = rowEnd.indexOf(Math.min.apply(null, rowEnd));
+        rowEnd[row] = px + half;
+        rows = Math.max(rows, row + 1);
+        return { x: v.x, label: String(v.label), row: row };
+    });
+    var T = 48 + rows * 12;
+    var plotH = H - T - B;
+
+    // --- 線（SVG 画像）。座標は描いた時点の px（上下左右に P の余白） ---
+    function X(x) {
+        return _solver_r1(P + fx(x) * plotW);
+    }
+    function Y(y) {
+        return _solver_r1(P + (1 - (y - yMin) / (yMax - yMin)) * plotH);
+    }
+    var left = P;
+    var right = _solver_r1(P + plotW);
+    var top = P;
+    var bottom = _solver_r1(P + plotH);
+    var noScale = ' fill="none" vector-effect="non-scaling-stroke"';
+    var crisp = noScale + ' shape-rendering="crispEdges"';
+    var grid = "";
+    yTicks.forEach(function (v) {
+        grid += "M" + left + " " + Y(v) + "H" + right;
+    });
+    xTicks.forEach(function (v) {
+        grid += "M" + X(v) + " " + top + "V" + bottom;
+    });
+    var svg = [
+        '<path d="' + grid + '" stroke="#eceff3"' + crisp + "/>",
+        '<path d="M' + left + " " + top + "V" + bottom + "H" + right +
+            '" stroke="#c4cad3"' + crisp + "/>",
+    ];
+    series.forEach(function (s) {
+        if (!s.fill) return;
+        svg.push(
+            '<path d="' + _solver_stepPath(s.xs, s.ys, X, Y) + "V" + bottom +
+                "H" + X(s.xs[0]) + 'Z" fill="' + s.fill + '"/>'
+        );
+    });
+    series.forEach(function (s) {
+        svg.push(
+            '<path d="' + _solver_stepPath(s.xs, s.ys, X, Y) + '" stroke="' +
+                s.color + '" stroke-width="' + s.width + '"' + noScale + "/>"
+        );
+    });
+    var vd = "";
+    vlines.forEach(function (v) {
+        vd += "M" + X(v.x) + " " + top + "V" + bottom;
+    });
+    if (vd) {
+        svg.push(
+            '<path d="' + vd + '" stroke="rgba(150,150,150,0.6)"' +
+                ' stroke-dasharray="3 3"' + crisp + "/>"
+        );
+    }
+    var vw = _solver_r1(plotW + 2 * P);
+    var vh = _solver_r1(plotH + 2 * P);
+    var src =
+        "data:image/svg+xml," +
+        encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="' + vw +
+                '" height="' + vh + '" viewBox="0 0 ' + vw + " " + vh +
+                '" preserveAspectRatio="none">' + svg.join("") + "</svg>"
+        );
+
+    // --- 文字（HTML）。描画域（plot）を基準に % / px で置く ---
+    var tick = {
+        position: "absolute",
+        fontSize: "11px",
+        lineHeight: "14px",
+        color: "#666",
+        whiteSpace: "nowrap",
+    };
+    var plot = [
+        _solver_h("Img", {
+            src: src,
+            alt: opts.alt,
+            style: {
+                position: "absolute",
+                left: -P + "px",
+                top: -P + "px",
+                width: "calc(100% + " + 2 * P + "px)",
+                height: vh + "px",
+                maxWidth: "none",
+                display: "block",
+            },
+        }),
+    ];
+    yTicks.forEach(function (v) {
+        plot.push(
+            _solver_h("Div", {
+                children: _solver_fmtNum(v),
+                style: Object.assign({}, tick, {
+                    right: "calc(100% + 6px)",
+                    top: Y(v) - P + "px",
+                    transform: "translateY(-50%)",
+                }),
+            })
+        );
+    });
+    xTicks.forEach(function (v) {
+        var text = _solver_fmtNum(v);
+        // 右端のラベルがはみ出すときは左に寄せる
+        var over = Math.max(0, fx(v) * plotW + (text.length * 6.5) / 2 - plotW - R + 2);
+        plot.push(
+            _solver_h("Div", {
+                children: text,
+                style: Object.assign({}, tick, {
+                    left: _solver_pct(fx(v)),
+                    top: "calc(100% + 5px)",
+                    transform: "translateX(calc(-50% - " + Math.ceil(over) + "px))",
+                }),
+            })
+        );
+    });
+    vlines.forEach(function (v) {
+        plot.push(
+            _solver_h("Div", {
+                children: v.label,
+                style: {
+                    position: "absolute",
+                    left: _solver_pct(fx(v.x)),
+                    bottom: "calc(100% + " + (2 + v.row * 12) + "px)",
+                    transform: "translateX(-50%)",
+                    fontSize: "10px",
+                    lineHeight: "12px",
+                    color: "#888",
+                },
+            })
+        );
+    });
+
+    var legend = series.map(function (s) {
+        return _solver_h("Span", {
+            children: [
+                _solver_h("Span", {
+                    style: {
+                        display: "inline-block",
+                        width: "22px",
+                        height: s.fill ? "8px" : "0",
+                        borderTop: s.width + "px solid " + s.color,
+                        background: s.fill || "transparent",
+                        verticalAlign: "middle",
+                        marginRight: "6px",
+                    },
+                }),
+                s.name,
+            ],
+            style: { whiteSpace: "nowrap" },
+        });
+    });
+
+    return _solver_h("Div", {
+        id: "bond-graph",
+        children: [
+            _solver_h("Div", {
+                children: opts.title,
+                style: {
+                    position: "absolute",
+                    top: "2px",
+                    left: 0,
+                    right: 0,
+                    textAlign: "center",
+                    fontSize: "15px",
+                    lineHeight: "22px",
+                    color: "#333",
+                },
+            }),
+            _solver_h("Div", {
+                children: legend,
+                style: {
+                    position: "absolute",
+                    top: "26px",
+                    left: 0,
+                    right: 0,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                    gap: "0 16px",
+                    fontSize: "12px",
+                    lineHeight: "18px",
+                    color: "#444",
+                },
+            }),
+            _solver_h("Div", {
+                children: plot,
+                style: {
+                    position: "absolute",
+                    left: L + "px",
+                    right: R + "px",
+                    top: T + "px",
+                    height: plotH + "px",
+                },
+            }),
+            _solver_h("Div", {
+                children: opts.yTitle,
+                style: {
+                    position: "absolute",
+                    left: "12px",
+                    top: T + plotH / 2 + "px",
+                    transform: "translate(-50%, -50%) rotate(-90deg)",
+                    whiteSpace: "nowrap",
+                    fontSize: "12px",
+                    lineHeight: "16px",
+                    color: "#444",
+                },
+            }),
+            _solver_h("Div", {
+                children: opts.xTitle,
+                style: {
+                    position: "absolute",
+                    left: L + "px",
+                    right: R + "px",
+                    bottom: "2px",
+                    textAlign: "center",
+                    fontSize: "12px",
+                    lineHeight: "16px",
+                    color: "#444",
+                },
+            }),
+        ],
+        style: {
+            position: "relative",
+            height: H + "px",
+            overflow: "hidden",
+            background: "#fff",
+            fontFamily: _SOLVER_GRAPH_FONT,
+        },
+    });
+}
+
+/*
+ * 画面幅が大きく変わったら（回転・ウィンドウの幅の変更）、目盛りの数や縦線の
+ * 番号の段を決め直してグラフを描き直す。それまでの間は線の画像が伸び縮みする。
+ */
+var _solver_resizeTimer = null;
+window.addEventListener("resize", function () {
+    clearTimeout(_solver_resizeTimer);
+    _solver_resizeTimer = setTimeout(function () {
+        var last = _solver_lastGraph;
+        var dc = window.dash_clientside;
+        if (!last || !dc || !dc.set_props) return;
+        if (!document.getElementById("bond-graph")) return;
+        if (Math.abs(_solver_graphWidth() - last.width) < 40) return;
+        dc.set_props("bond-graph", {
+            children: _solver_stepChart(last.opts).props.children,
+        });
+    }, 200);
+});
+
+/* ------------------------------------------------------------------ */
 /*  スピナーコンポーネント                                                */
 /* ------------------------------------------------------------------ */
 
@@ -669,84 +1066,38 @@ function _solver_calcChartSync(
         greedyBonusData.push(grb);
     }
 
-    // 要約チャートの各行に対応する縦線
-    var vlineShapes = [];
-    var vlineAnnotations = [];
+    // 要約チャートの各行に対応する縦線（番号 = 要約チャートの行番号）
+    var vlines = [];
     for (var vi = 0; vi < summary.length; vi++) {
         var xPos = cumExpData[summary[vi].end];
         if (xPos === undefined) continue;
-        vlineShapes.push({
-            type: "line",
-            x0: xPos, x1: xPos,
-            y0: 0, y1: 1,
-            yref: "paper",
-            line: { color: "rgba(150,150,150,0.5)", width: 1, dash: "dot" },
-        });
-        vlineAnnotations.push({
-            x: xPos,
-            y: 1,
-            yref: "paper",
-            text: String(vi + 1),
-            showarrow: false,
-            font: { size: 10, color: "#888" },
-            yanchor: "bottom",
-        });
+        vlines.push({ x: xPos, label: vi + 1 });
     }
 
-    var graphFigure = {
-        data: [
+    var graphComponent = _solver_stepChart({
+        title: "経験値 vs 絆ボーナス合計値",
+        xTitle: "累積経験値",
+        yTitle: "絆ボーナス合計値",
+        alt: "累積経験値ごとの絆ボーナス合計値の推移",
+        series: [
             {
                 name: "Sidney分解（最適）",
-                x: cumExpData,
-                y: totalBonusData,
-                type: "scatter",
-                mode: "lines",
-                line: { color: "#2ecc71", width: 2.5, shape: "hv" },
-                fill: "tozeroy",
-                fillcolor: "rgba(46,204,113,0.1)",
+                xs: cumExpData,
+                ys: totalBonusData,
+                color: "#2ecc71",
+                width: 2.5,
+                fill: "rgba(46,204,113,0.1)",
             },
             {
                 name: "貪欲法",
-                x: greedyExpData,
-                y: greedyBonusData,
-                type: "scatter",
-                mode: "lines",
-                line: { color: "#e67e22", width: 1.5, shape: "hv" },
+                xs: greedyExpData,
+                ys: greedyBonusData,
+                color: "#e67e22",
+                width: 1.5,
             },
         ],
-        layout: {
-            title: { text: "経験値 vs 絆ボーナス合計値" },
-            xaxis: { title: { text: "累積経験値" } },
-            yaxis: { title: { text: "絆ボーナス合計値" }, range: [initBonus, totalBonusData[totalBonusData.length - 1]] },
-            legend: { x: 0.02, y: 0.98, bgcolor: "rgba(255,255,255,0.8)" },
-            margin: { t: 40, r: 20, b: 50, l: 60 },
-            height: 380,
-            shapes: vlineShapes,
-            annotations: vlineAnnotations,
-        },
-    };
-
-    var graphComponent = {
-        namespace: "dash_core_components",
-        type: "Graph",
-        props: {
-            figure: graphFigure,
-            config: {
-                modeBarButtonsToRemove: [
-                    "select2d",
-                    "lasso2d",
-                    "autoScale2d",
-                ],
-                displaylogo: false,
-                toImageButtonOptions: {
-                    format: "png",
-                    filename: "bond_bonus_graph",
-                    scale: 2,
-                },
-            },
-            style: { marginTop: "16px" },
-        },
-    };
+        vlines: vlines,
+    });
 
     // --- 結果コンポーネント ---
     return _solver_h("Div", {
@@ -798,6 +1149,19 @@ function _solver_calcChartSync(
                             marginTop: "16px",
                             marginBottom: "8px",
                             fontWeight: "bold",
+                        },
+                    }),
+                    _solver_h("Div", {
+                        children: _solver_h("Button", {
+                            children: "画像保存",
+                            id: "save-graph-image-btn",
+                            n_clicks: 0,
+                            className: "btn btn-sm",
+                        }),
+                        style: {
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            marginBottom: "8px",
                         },
                     }),
                     graphComponent,

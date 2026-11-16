@@ -80,6 +80,28 @@ document.addEventListener('click', function(e) {
         return;
     }
 
+    // グラフ（経験値 vs 絆ボーナス）の画像保存
+    var graphImgBtn = e.target.closest('#save-graph-image-btn');
+    if (graphImgBtn) {
+        var graph = document.getElementById('bond-graph');
+        if (!graph) return;
+        if (typeof html2canvas === 'undefined') {
+            alert('画像保存機能を読み込み中です。少し待ってから再度お試しください。');
+            return;
+        }
+        html2canvas(graph, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+            scrollY: -window.scrollY,
+        }).then(function(canvas) {
+            var link = document.createElement('a');
+            link.download = 'bond_bonus_graph.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+        return;
+    }
+
     // 詳細チャート画像保存
     var detailImgBtn = e.target.closest('#save-detail-image-btn');
     if (detailImgBtn) {
