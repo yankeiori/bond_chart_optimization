@@ -1188,10 +1188,16 @@ input[type="number"] {
 }
 .bm-ocr-example {
     display: block;
-    max-width: min(100%, 480px);
+    width: min(100%, 480px);
+    aspect-ratio: 1000 / 505; /* ocr_example.webp の縦横比 */
     margin-top: 6px;
     border: 1px solid #ccc;
     border-radius: 4px;
+    background: #f3f4f6 center / contain no-repeat;
+}
+/* 折りたたみを開いたときだけ画像を読み込む（閉じたままなら通信しない） */
+.bm-ocr-help[open] .bm-ocr-example {
+    background-image: url("ocr_example.webp");
 }
 /* 要確認の衣装の行に並べる、読み取ったカードの切り抜き（bond_ocr.js の crops） */
 .bm-ocr-crops {
@@ -1245,8 +1251,86 @@ input[type="number"] {
 .bs-bin-label {
     color: var(--c-muted);
 }
-.bs-hist-graph {
+/* 絆ランクの分布（callbacks.py の _bs_hist_chart）。横軸は絆ランク 1〜100 に
+   固定し、棒の位置・幅・高さは % で指定する（plotly は使わない） */
+.bs-hist {
+    position: relative;
     max-width: 760px;
+    /* 上: 絆ボーナス上限のラベル、左: 縦軸のタイトルと目盛り */
+    padding: 24px 10px 0 46px;
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: #4b5563;
+}
+.bs-hist-plot {
+    position: relative;
+    height: 200px;
+    border-bottom: 1px solid #c4cad3;
+}
+.bs-hist-ytitle {
+    position: absolute;
+    left: 9px;
+    top: calc(24px + 100px); /* 上の余白 + 描画域の高さの半分 */
+    transform: translate(-50%, -50%) rotate(-90deg);
+    white-space: nowrap;
+}
+/* 縦軸の目盛り線とラベル */
+.bs-hist-grid {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px solid var(--c-divider);
+}
+.bs-hist-grid > span {
+    position: absolute;
+    right: calc(100% + 6px);
+    top: 0;
+    transform: translateY(-50%);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.bs-hist-bar {
+    position: absolute;
+    bottom: 0;
+    background: var(--c-primary);
+    border-radius: 2px 2px 0 0;
+    /* 隣の棒との境目 */
+    box-shadow: inset -1px 0 #fff;
+}
+.bs-hist-bar:hover {
+    background: #2f6fb5;
+}
+/* 絆ボーナス上限の点線 */
+.bs-hist-cap {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    margin-left: -1px; /* 棒の上ではなく、棒の間の白い境目に重ねる */
+    border-left: 1px dotted #9ca3af;
+    pointer-events: none;
+}
+.bs-hist-cap > span {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 0.7rem;
+    color: var(--c-muted);
+}
+.bs-hist-xlabels {
+    position: relative;
+    height: 18px;
+}
+.bs-hist-xlabels > span {
+    position: absolute;
+    top: 4px;
+    transform: translateX(-50%);
+    line-height: 1;
+}
+.bs-hist-xtitle {
+    margin-top: 2px;
+    text-align: center;
 }
 .bs-list {
     display: grid;

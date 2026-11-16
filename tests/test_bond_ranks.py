@@ -1,6 +1,7 @@
 """絆ランク管理のデータ操作のテスト。"""
 
 import pytest
+from dash import html
 from dash.exceptions import PreventUpdate
 
 from app.backend.bond_exp import BOND_EXP_PER_LEVEL
@@ -23,6 +24,7 @@ from app.frontend.callbacks import (
     _overlay_bond_ranks,
     _save_inputs_to_bond_ranks,
 )
+from tests.test_layout import _find_by_class
 
 
 def _data(*entries):
@@ -485,10 +487,47 @@ class TestBsBinSize:
         assert len(_bs_hist_bins([], 1)) == 100
         assert [b["label"] for b in _bs_hist_bins([], 5)][:2] == ["1〜4", "5〜9"]
 
-    def test_figure(self):
-        fig = bs_bin_size(5, [3, 48])
-        assert fig.data[0].customdata[0] == "1〜4"
-        assert fig.data[0].y[0] == 1
+    @staticmethod
+    def _find(children, class_name):
+        return _find_by_class(html.Div(children), class_name)
+
+    def test_chart(self):
+        out = bs_bin_size(5, [3, 48])
+        bars = self._find(out, "bs-hist-bar")
+        # 衣装のいる区間だけ棒を描く。横軸 1〜100 に対する % で位置・幅を決める
+        assert [b.title for b in bars] == [
+            "絆ランク 1〜4: 1 衣装",
+            "絆ランク 45〜49: 1 衣装",
+        ]
+        assert [(b.style["left"], b.style["width"]) for b in bars] == [
+            ("0.000%", "4.000%"),
+            ("44.000%", "5.000%"),
+        ]
+        assert bars[0].style["height"] == "100.000%"
+        (cap,) = self._find(out, "bs-hist-cap")
+        assert cap.style["left"] == "49.000%"
+        assert cap.children.children == "絆ボーナス上限（50）"
+        (xlabels,) = self._find(out, "bs-hist-xlabels")
+        assert xlabels.children[0].children == "1"
+        assert xlabels.children[0].style["left"] == "0.500%"
+        assert xlabels.children[-1].style["left"] == "99.500%"
+
+    def test_chart_height_is_relative_to_top_tick(self):
+        bars = self._find(bs_bin_size(10, [1, 2, 3, 50]), "bs-hist-bar")
+        # 最大 3 衣装 → 縦軸の目盛りは 0〜3、3 衣装の棒が描画域いっぱい
+        assert [b.style["height"] for b in bars] == ["100.000%", "33.333%"]
+
+    def test_count_ticks(self):
+        def ticks(ranks):
+            grid = self._find(bs_bin_size(10, ranks), "bs-hist-grid")
+            return [int(g.children.children) for g in grid]
+
+        # 縦軸（衣装数）は 0 から最大値以上まで、きりのよい間隔
+        assert ticks([]) == [0, 1]
+        assert ticks([1] * 4) == [0, 1, 2, 3, 4]
+        assert ticks([1] * 37) == [0, 10, 20, 30, 40]
+        assert ticks([1] * 41) == [0, 10, 20, 30, 40, 50]
+        assert ticks([1] * 120) == [0, 50, 100, 150]
 
     def test_invalid(self):
         for v in (None, 0, 2, 7):

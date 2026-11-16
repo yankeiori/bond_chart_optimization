@@ -120,6 +120,21 @@ class TestCreateLayout:
         modal = found[0]
         assert modal.style.get("display") == "none"
 
+    def test_manual_is_rendered_on_first_open(self, layout):
+        # ページを開いただけでは Markdown（async-markdown.js 約100KB）を描かない
+        (body,) = _find_by_id(layout, "manual-body")
+        assert body.children == "読み込み中…"
+        assert "Markdown" not in str(layout)
+        from dash.exceptions import PreventUpdate
+
+        from app.frontend.callbacks import render_manual
+
+        markdown, loaded = render_manual(1, None)
+        assert "マニュアル" in markdown.children
+        assert loaded == "manual-loaded"
+        with pytest.raises(PreventUpdate):
+            render_manual(2, loaded)
+
     def test_has_add_student_btn(self, layout):
         found = _find_by_id(layout, "add-student-btn")
         assert len(found) == 1
@@ -371,6 +386,26 @@ class TestMakeBondRankInput:
 # ---------------------------------------------------------------------------
 # _default_costume_name
 # ---------------------------------------------------------------------------
+
+
+class TestBondRankOcrHelp:
+    def test_sample_image_loads_only_when_opened(self):
+        # 撮り方の折りたたみの中のサンプル画像は <img> にせず、開いたときだけ
+        # CSS の背景画像として読み込む（style.css の .bm-ocr-help[open]）
+        layout = create_bond_ranks_layout()
+        (help_,) = _find_by_class(layout, "bm-ocr-help")
+        assert "Img(" not in str(help_)
+        (example,) = _find_by_class(help_, "bm-ocr-example")
+        assert example.role == "img"
+        assets = Path(__file__).resolve().parents[1] / "assets"
+        css = (assets / "style.css").read_text(encoding="utf-8")
+        assert re.search(
+            r"\.bm-ocr-help\[open\] \.bm-ocr-example \{\s*"
+            r'background-image: url\("ocr_example\.webp"\);',
+            css,
+        )
+        assert "/assets/ocr_example.webp" in str(help_)  # 原寸で開くリンク
+        assert (assets / "ocr_example.webp").exists()
 
 
 class TestBondRankSort:

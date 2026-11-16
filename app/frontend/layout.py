@@ -537,7 +537,12 @@ def _manual_modal() -> html.Div:
                         "marginBottom": "12px",
                     },
                 ),
-                dcc.Markdown(_MANUAL_MD, style={"overflowY": "auto", "flex": "1"}),
+                # 中身は初めて開いたときに描く（callbacks.py の render_manual）
+                html.Div(
+                    "読み込み中…",
+                    id="manual-body",
+                    style={"overflowY": "auto", "flex": "1"},
+                ),
             ],
             className="manual-modal-content",
         ),
@@ -1497,13 +1502,15 @@ def _bm_ocr_panel() -> html.Div:
                         "まとめて選べます（画面の端で切れているカードは読み取りません）。",
                         className="hint",
                     ),
+                    # 画像は折りたたみを開いたときだけ読み込む（style.css の
+                    # .bm-ocr-help[open] .bm-ocr-example の背景画像）
                     html.A(
-                        html.Img(
-                            src="/assets/ocr_example.jpg",
-                            alt="生徒リスト画面のスクリーンショット例",
+                        html.Div(
+                            role="img",
                             className="bm-ocr-example",
+                            **{"aria-label": "生徒リスト画面のスクリーンショット例"},
                         ),
-                        href="/assets/ocr_example.jpg",
+                        href="/assets/ocr_example.webp",
                         target="_blank",
                     ),
                 ],
