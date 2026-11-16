@@ -248,7 +248,7 @@ function _giftOcr_faceFeature(img, box) {
     var out = new Float32Array(_giftOcr_FACE_N * _giftOcr_FACE_N);
     for (var i = 0; i < out.length; i++) {
         var a = s.alpha[i];
-        // 透明な画素は白と合成する（assets/reaction の PNG の外側）
+        // 透明な画素は白と合成する（assets/reaction の画像の外側）
         var l = 0.299 * s.rgb[i * 3] + 0.587 * s.rgb[i * 3 + 1] + 0.114 * s.rgb[i * 3 + 2];
         out[i] = l * a + 255 * (1 - a);
     }
@@ -572,10 +572,11 @@ function _giftOcr_cropCard(im, rect) {
 var _giftOcr_refsPromise = null;
 
 /**
- * 照合用データ（ページ内で 1 回だけ作る）。gifts は [{id, name, type, src}]。
+ * 照合用データ（ページ内で 1 回だけ作る）。gifts は [{id, name, type, src}]、
+ * faces は顔アイコンの URL {tier: src}（assets/reaction）。
  * Returns {refs: [{id, name, high, all, feature}], faceRefs: {tier: 特徴}}。
  */
-function _giftOcr_loadRefs(gifts) {
+function _giftOcr_loadRefs(gifts, faces) {
     if (!_giftOcr_refsPromise) {
         var giftRefs = Promise.all(gifts.map(function (g) {
             return _giftOcr_loadImage(g.src).then(function (im) {
@@ -588,7 +589,7 @@ function _giftOcr_loadRefs(gifts) {
             }, function () { return null; });
         }));
         var faceRefs = Promise.all(_giftOcr_TIERS.map(function (t) {
-            return _giftOcr_loadImage("/assets/reaction/" + t + ".png").then(function (im) {
+            return _giftOcr_loadImage(faces[t]).then(function (im) {
                 return _giftOcr_reactionFeature(_giftOcr_imageData(im));
             });
         }));
@@ -610,14 +611,15 @@ function _giftOcr_esc(s) {
 /**
  * ファイル選択欄 (input[type=file]) の画像を読み、ページの好みのラジオ
  * (name="g_<贈り物ID>") に入れる。box は結果を出す要素、gifts は贈り物の一覧
- * [{id, name, type, src}]（花束など好みのラジオが無い贈り物も含む）。
+ * [{id, name, type, src}]（花束など好みのラジオが無い贈り物も含む）、
+ * faces は顔アイコンの URL {tier: src}。
  */
-async function giftOcrRead(input, box, gifts) {
+async function giftOcrRead(input, box, gifts, faces) {
     var files = Array.prototype.slice.call(input.files || []);
     if (!files.length) return;
     box.innerHTML = "読み取り中...";
     try {
-        var data = await _giftOcr_loadRefs(gifts);
+        var data = await _giftOcr_loadRefs(gifts, faces);
         var results = [], failed = 0, crops = {};
         for (var i = 0; i < files.length; i++) {
             var url = URL.createObjectURL(files[i]);

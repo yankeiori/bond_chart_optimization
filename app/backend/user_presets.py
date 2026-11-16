@@ -11,7 +11,8 @@ import os
 import threading
 import time
 from pathlib import Path
-from urllib.parse import quote
+
+from app.backend.icons import icon_src
 
 _logger = logging.getLogger(__name__)
 
@@ -890,12 +891,12 @@ def load_gifts() -> list[dict]:
 
 
 def gift_image_src(gift: dict) -> str:
-    """贈り物アイコンの URL。ファイル名は gift.name（日本語可）。
+    """贈り物アイコンの URL（?v= 付き）。ファイル名は gift.name（日本語可）。
 
     日本語名を URL に含めるためパーセントエンコードする。画像ファイル
-    (assets/gift/<name>.png) のファイル名は DB の gift.name と一致させる。
+    (assets/gift/<name>.webp) のファイル名は DB の gift.name と一致させる。
     """
-    return f"/assets/gift/{quote(gift['name'])}.png"
+    return icon_src("gift", gift["name"])
 
 
 # ----------------------------------------------------------------------

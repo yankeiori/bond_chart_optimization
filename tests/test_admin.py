@@ -428,7 +428,7 @@ class TestGiftOcr:
         assert '"id": "beautiful-bouquet"' in html
         assert '"type": "high-all"' in html
         assert "gift-select-box" not in html
-        assert "/assets/gift/%E8%B4%88%E3%82%8A%E7%89%A9A.png" in html
+        assert "/assets/gift/%E8%B4%88%E3%82%8A%E7%89%A9A.webp" in html
 
     def test_add_page_has_reader(self, ocr_client):
         page = ocr_client.get("/admin/add").get_data(as_text=True)

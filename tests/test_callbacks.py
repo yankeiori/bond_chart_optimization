@@ -5,6 +5,7 @@
 
 from urllib.parse import quote
 
+from app.backend.icons import ICON_VERSIONS
 from app.frontend.callbacks import (
     _bond_view_texts,
     _gift_inputs_to_maps,
@@ -293,7 +294,10 @@ class TestGsFurnitureCell:
 class TestWithStudentIcon:
     def test_icon_before_label(self):
         icon, text = _with_student_icon("ホシノ（水着）")
-        assert icon.src == "/assets/student/" + quote("ホシノ（水着）") + ".webp"
+        version = ICON_VERSIONS["student"]["ホシノ（水着）"]
+        assert icon.src == (
+            "/assets/student/" + quote("ホシノ（水着）") + ".webp?v=" + version
+        )
         assert text == "ホシノ（水着）"
 
     def test_custom_text(self):

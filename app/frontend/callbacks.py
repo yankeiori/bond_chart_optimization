@@ -1,14 +1,13 @@
 """サーバーサイドコールバック。"""
 
 import logging
-from pathlib import Path
-from urllib.parse import quote
 
 import plotly.graph_objects as go
 from dash import html, dcc, callback, Input, Output, State, ALL, ctx, no_update
 from dash.exceptions import PreventUpdate
 
 from app.backend.accounts import save_user_bond_ranks, session_user_id
+from app.backend.icons import has_icon, icon_src
 from app.backend.student import BOND_RANGES
 from app.backend.user_presets import (
     HAS_DB,
@@ -176,16 +175,15 @@ def gs_update_status_radio(dropdown_value, autosave_data):
 
 # 並び替え（▲▼）ボタンの共通スタイル
 
-# 生徒画像（scripts/fetch_student_icons.py で取得）。ファイル名は衣装の表示名
-_STUDENT_ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "student"
-_STUDENT_ICONS = {p.stem for p in _STUDENT_ICON_DIR.glob("*.webp")}
-
 
 def _student_icon_src(label: str) -> str | None:
-    """衣装の表示名 label の生徒画像の URL。画像が無い衣装は None。"""
-    if label not in _STUDENT_ICONS:
+    """衣装の表示名 label の生徒画像の URL（?v= 付き）。画像が無い衣装は None。
+
+    生徒画像は scripts/fetch_student_icons.py で取得する。ファイル名は衣装の表示名。
+    """
+    if not has_icon("student", label):
         return None
-    return f"/assets/student/{quote(label)}.webp"
+    return icon_src("student", label)
 
 
 def _student_icon(label: str, size: int = 32):
@@ -398,7 +396,7 @@ def _gs_present_table(
         + [
             html.Th(
                 html.Img(
-                    src=f"/assets/reaction/{_GS_TIER_ICON[t]}.png",
+                    src=icon_src("reaction", _GS_TIER_ICON[t]),
                     alt=_GS_TIER_LABELS[t],
                     title=_GS_TIER_LABELS[t],
                     style={"height": "24px", "verticalAlign": "middle"},
@@ -2742,7 +2740,7 @@ def _gl_tier_section(gift: dict, tier: str, members: list[dict]) -> html.Div:
             html.Div(
                 [
                     html.Img(
-                        src=f"/assets/reaction/{_GS_TIER_ICON[tier]}.png",
+                        src=icon_src("reaction", _GS_TIER_ICON[tier]),
                         alt=label,
                         title=label,
                         style={"height": "24px", "verticalAlign": "middle"},
@@ -2882,7 +2880,7 @@ def _nc_gift_row(gift: dict, gifts_by_id: dict, weighted: bool) -> html.Div:
     if gift["tier"]:
         target = [
             html.Img(
-                src=f"/assets/reaction/{TIER_ICON[gift['tier']]}.png",
+                src=icon_src("reaction", TIER_ICON[gift["tier"]]),
                 title=TIER_LABEL[gift["tier"]],
                 style={"height": "18px", "verticalAlign": "middle"},
             ),
@@ -3196,11 +3194,11 @@ def bm_render(_n, bond_ranks):
 
     入力値の保存は bm_save_edits が行う。入力のたびに行を再生成すると
     フォーカスを失うため、描画はここだけで行う。あわせて、スクリーンショット
-    読み取りで照合する衣装の [[衣装ID, 表示名, 生徒画像があるか], ...] を返す
-    （生徒画像の無い衣装は名前だけで照合する）。
+    読み取りと画像保存で使う衣装の [[衣装ID, 表示名, 生徒画像の URL], ...] を返す
+    （生徒画像の無い衣装は URL が None で、読み取りでは名前だけで照合する）。
     """
     options = get_costume_options()
-    refs = [[o["value"], o["label"], o["label"] in _STUDENT_ICONS] for o in options]
+    refs = [[o["value"], o["label"], _student_icon_src(o["label"])] for o in options]
     return _bm_rows(bond_ranks, options), refs
 
 

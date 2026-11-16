@@ -974,7 +974,7 @@ function _bondOcr_renderText(text) {
 var _bondOcr_refsPromise = null;
 
 /**
- * refs: [[costume_id, 表示名, 生徒画像があるか], ...]。
+ * refs: [[costume_id, 表示名, 生徒画像の URL（無ければ null）], ...]（bm-ocr-refs）。
  * Returns {icons: 生徒画像 [{id, label, feature}], names: 名前 [{id, label, hasIcon, rendered}]}。
  * 画像を読み込めなかった衣装は名前だけで照合する。
  */
@@ -983,7 +983,7 @@ function _bondOcr_loadRefs(refs) {
     if (!_bondOcr_refsPromise) {
         _bondOcr_refsPromise = Promise.all(refs.map(function (r) {
             if (!r[2]) return null;
-            return _bondOcr_loadImage("/assets/student/" + encodeURIComponent(r[1]) + ".webp")
+            return _bondOcr_loadImage(r[2])
                 .then(function (im) {
                     return { id: r[0], label: r[1], feature: _bondOcr_iconFeature(_bondOcr_imageData(im)) };
                 }, function () { return null; });

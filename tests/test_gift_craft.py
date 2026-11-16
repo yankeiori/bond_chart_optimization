@@ -32,7 +32,7 @@ def test_second_nodes_cover_35_unique_gifts():
 @pytest.mark.parametrize("name", _ALL_NAMES)
 def test_gift_names_match_assets(name):
     # gift.name = アイコン画像のファイル名なので、表記ゆれがあれば検出できる
-    assert (_GIFT_ASSETS / f"{name}.png").exists()
+    assert (_GIFT_ASSETS / f"{name}.webp").exists()
 
 
 def test_second_node_lookup():
@@ -273,7 +273,7 @@ def test_crafting_data_gift_names_match_assets():
     # 通常 35 種 + 高級 13 種
     assert len(_CRAFT_NAMES) == 48
     assert len(_HIGH_NAMES) == 13
-    missing = [n for n in _CRAFT_NAMES if not (_GIFT_ASSETS / f"{n}.png").exists()]
+    missing = [n for n in _CRAFT_NAMES if not (_GIFT_ASSETS / f"{n}.webp").exists()]
     assert missing == []
 
 
