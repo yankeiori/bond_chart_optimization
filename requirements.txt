@@ -2,7 +2,7 @@
 #    uv export --no-dev --no-hashes -o requirements.txt
 annotated-types==0.8.0
     # via pydantic
-authlib==1.9.2
+authlib==1.9.5
     # via bond-chart-optimization
 backports-zstd==1.8.0 ; python_full_version < '3.14'
     # via flask-compress
@@ -20,7 +20,7 @@ cffi==2.1.1
     #   cryptography
 charset-normalizer==3.5.2
     # via requests
-click==8.5.0
+click==8.5.1
     # via flask
 comm==0.2.3
     # via dash
@@ -40,7 +40,7 @@ gunicorn==26.2.0
     # via bond-chart-optimization
 idna==3.20
     # via requests
-importlib-metadata==10.1.0
+importlib-metadata==10.2.0
     # via dash
 itsdangerous==2.2.0
     # via flask
@@ -48,7 +48,7 @@ janus==2.0.0
     # via dash
 jinja2==3.1.6
     # via flask
-joserfc==1.7.7
+joserfc==1.8.0
     # via authlib
 markupsafe==3.0.4
     # via
@@ -73,9 +73,9 @@ psycopg2-binary==2.9.13
     # via bond-chart-optimization
 pycparser==3.12 ; implementation_name != 'PyPy'
     # via cffi
-pydantic==2.14.2
+pydantic==2.14.3
     # via dash
-pydantic-core==2.50.2
+pydantic-core==2.50.4
     # via pydantic
 pyscipopt==6.3.0
     # via bond-chart-optimization
@@ -93,7 +93,7 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   typing-inspection
-typing-inspection==0.4.4
+typing-inspection==0.4.5
     # via pydantic
 urllib3==2.8.0
     # via requests
