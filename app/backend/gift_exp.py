@@ -16,7 +16,7 @@ _TIER_TO_EFFECTIVITY = {
 }
 
 
-# present.tier -> リアクションアイコン名 (assets/reaction/<name>.png)。
+# present.tier -> リアクションアイコン名 (assets/reaction/<name>.webp)。
 TIER_ICON = {
     "favorite": "favorite",
     "superFavorite": "super",

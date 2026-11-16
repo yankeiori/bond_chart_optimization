@@ -126,7 +126,7 @@ def build() -> tuple[list[list[tuple]], dict[int, tuple]]:
             for nodes in tiers
             for *_, gifts in nodes
             for name, *_ in gifts
-            if not (_GIFT_ASSETS / f"{name}.png").exists()
+            if not (_GIFT_ASSETS / f"{name}.webp").exists()
         }
     )
     if missing:

@@ -23,6 +23,7 @@ from app.backend.accounts import (
     pop_auth_error,
 )
 from app.backend.auth import same_origin
+from app.backend.icons import ICON_VERSIONS, icon_src
 from app.backend.student import BOND_RANGES
 from app.backend.usage_stats import (
     JST,
@@ -62,7 +63,7 @@ _TIER_LABELS = {
     "ultraFavorite": "最も好み (特大)",
 }
 
-# present.tier -> リアクションアイコン (assets/reaction/<name>.png)。
+# present.tier -> リアクションアイコン (assets/reaction/<name>.webp)。
 # gift_exp._TIER_TO_EFFECTIVITY と同じ対応。
 _TIER_ICON = {
     "favorite": "favorite",
@@ -804,7 +805,8 @@ def _gift_ocr_panel() -> str:
 
     読み取った好みはページの好みのラジオ (name="g_<贈り物ID>") に入る。
     照合には花束など好みのラジオが無い贈り物も要るので、選択ボックス以外の
-    全贈り物を渡す。画像はブラウザ内で読み、サーバーへは送らない。
+    全贈り物を渡す。段の種類を決める顔アイコンは {名前: URL} で渡す。
+    画像はブラウザ内で読み、サーバーへは送らない。
     """
     gifts = [
         {
@@ -817,6 +819,9 @@ def _gift_ocr_panel() -> str:
         if g["id"] != _GIFT_SELECT_BOX_ID
     ]
     gifts_json = json.dumps(gifts, ensure_ascii=False).replace("<", "\\u003c")
+    faces_json = json.dumps(
+        {name: icon_src("reaction", name) for name in ICON_VERSIONS["reaction"]}
+    )
     return f"""<div class="gift-ocr">
       <label>スクリーンショットから読み取る:
         <input type="file" id="gift-ocr-file" accept="image/*" multiple></label>
@@ -829,7 +834,8 @@ def _gift_ocr_panel() -> str:
     <script src="/assets/admin_gift_ocr.js"></script>
     <script>
     document.getElementById('gift-ocr-file').addEventListener('change', function () {{
-      giftOcrRead(this, document.getElementById('gift-ocr-result'), {gifts_json});
+      giftOcrRead(this, document.getElementById('gift-ocr-result'), {gifts_json},
+        {faces_json});
     }});
     </script>"""
 
@@ -891,7 +897,7 @@ def _tier_select(gift_id: str, current: str) -> str:
         parts.append(
             f'<label class="tier-opt" title="{lbl}">'
             f'<input type="radio" name="{name}" value="{t}"{chk}>'
-            f'<img src="/assets/reaction/{_TIER_ICON[t]}.png" alt="{lbl}">'
+            f'<img src="{icon_src("reaction", _TIER_ICON[t])}" alt="{lbl}">'
             f"</label>"
         )
     return f'<div class="tier-group">{"".join(parts)}</div>'

@@ -25,8 +25,8 @@ def _first(subdir: str, pattern: str) -> str:
     "url",
     [
         _first("student", "*.webp"),
-        _first("gift", "*.png"),
-        _first("reaction", "*.png"),
+        _first("gift", "*.webp"),
+        _first("reaction", "*.webp"),
     ],
 )
 def test_icons_are_cached_for_a_week(client, url):
@@ -52,7 +52,7 @@ def test_dash_layout_is_not_cached(client):
 
 
 def test_dash_bundles_keep_long_cache(client):
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/chart-opt").get_data(as_text=True)
     start = html.index("/_dash-component-suites/dash/dcc/dash_core_components.v")
     url = html[start : html.index('"', start)]
     response = client.get(url)

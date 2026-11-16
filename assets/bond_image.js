@@ -24,12 +24,13 @@ var _BOND_IMAGE_LABEL_W = 72;  // グループの範囲を書く左端の列
 var _BOND_IMAGE_GROUP_GAP = 12;  // グループの間（区切り線を引く）
 var _BOND_IMAGE_FONT = '"Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif';
 
-function _bondImage_loadIcon(label) {
+/** 生徒画像（src は bm-ocr-refs の URL）。読み込めなければ null。 */
+function _bondImage_loadIcon(src) {
     return new Promise(function (resolve) {
         var im = new Image();
         im.onload = function () { resolve(im); };
         im.onerror = function () { resolve(null); };
-        im.src = "/assets/student/" + encodeURIComponent(label) + ".webp";
+        im.src = src;
     });
 }
 
@@ -211,7 +212,7 @@ window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.bond_image = {
     /**
      * 絆ランク管理の保存データ（bond-ranks）を画像にしてモーダルに表示する。
-     * refs は bm-ocr-refs（[[衣装ID, 表示名, 生徒画像があるか], ...]、
+     * refs は bm-ocr-refs（[[衣装ID, 表示名, 生徒画像の URL（無ければ null）], ...]、
      * 衣装の表示順）。Returns [画像の URL（bm-image の src）,
      * モーダルの style（bm-image-modal）, 結果のメッセージ（bm-image-feedback）]。
      */
@@ -228,14 +229,14 @@ window.dash_clientside.bond_image = {
         (refs || []).forEach(function (r, order) {
             var rank = rankByCostume[r[0]];
             if (rank !== undefined) {
-                entries.push({ label: r[1], rank: rank, hasIcon: r[2], order: order });
+                entries.push({ label: r[1], rank: rank, src: r[2], order: order });
             }
         });
         if (!entries.length) return [no, no, "絆ランクを設定した衣装がありません。"];
         // 絆ランクの高い順（同じなら一覧の表示順）
         entries.sort(function (a, b) { return b.rank - a.rank || a.order - b.order; });
         await Promise.all(entries.map(function (e) {
-            return (e.hasIcon ? _bondImage_loadIcon(e.label) : Promise.resolve(null))
+            return (e.src ? _bondImage_loadIcon(e.src) : Promise.resolve(null))
                 .then(function (im) { e.icon = im; });
         }));
         var url = await _bondImage_toUrl(_bondImage_draw(entries));

@@ -1,14 +1,12 @@
 """サーバーサイドコールバック。"""
 
 import logging
-from pathlib import Path
-from urllib.parse import quote
 
-import plotly.graph_objects as go
 from dash import html, dcc, callback, Input, Output, State, ALL, ctx, no_update
 from dash.exceptions import PreventUpdate
 
 from app.backend.accounts import save_user_bond_ranks, session_user_id
+from app.backend.icons import has_icon, icon_src
 from app.backend.student import BOND_RANGES
 from app.backend.user_presets import (
     HAS_DB,
@@ -65,6 +63,7 @@ from app.backend.bond_ranks import (
 )
 from app.frontend.layout import (
     BOND_RANKS_BTN_CLASS,
+    _MANUAL_MD,
     empty_note,
     panel,
     make_student_card,
@@ -72,7 +71,6 @@ from app.frontend.layout import (
     _default_costume_name,
     PAGES,
     EXTRA_PAGES,
-    ROOT_REDIRECT,
     create_layout,
     build_gs_gift_list,
     gs_default_used,
@@ -82,17 +80,7 @@ from app.frontend.layout import (
 )
 
 
-@callback(
-    Output("url", "pathname"),
-    Input("url", "pathname"),
-)
-def redirect_root(pathname):
-    """ルート (/) を計算機ページへリダイレクトする。"""
-    if pathname == "/":
-        return ROOT_REDIRECT
-    raise PreventUpdate
-
-
+# ルート (/) から計算機ページへの転送は main.py（サーバーの 302 とクライアントサイド）。
 @callback(
     Output("page-content", "children"),
     Input("url", "pathname"),
@@ -187,16 +175,15 @@ def gs_update_status_radio(dropdown_value, autosave_data):
 
 # 並び替え（▲▼）ボタンの共通スタイル
 
-# 生徒画像（scripts/fetch_student_icons.py で取得）。ファイル名は衣装の表示名
-_STUDENT_ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "student"
-_STUDENT_ICONS = {p.stem for p in _STUDENT_ICON_DIR.glob("*.webp")}
-
 
 def _student_icon_src(label: str) -> str | None:
-    """衣装の表示名 label の生徒画像の URL。画像が無い衣装は None。"""
-    if label not in _STUDENT_ICONS:
+    """衣装の表示名 label の生徒画像の URL（?v= 付き）。画像が無い衣装は None。
+
+    生徒画像は scripts/fetch_student_icons.py で取得する。ファイル名は衣装の表示名。
+    """
+    if not has_icon("student", label):
         return None
-    return f"/assets/student/{quote(label)}.webp"
+    return icon_src("student", label)
 
 
 def _student_icon(label: str, size: int = 32):
@@ -409,7 +396,7 @@ def _gs_present_table(
         + [
             html.Th(
                 html.Img(
-                    src=f"/assets/reaction/{_GS_TIER_ICON[t]}.png",
+                    src=icon_src("reaction", _GS_TIER_ICON[t]),
                     alt=_GS_TIER_LABELS[t],
                     title=_GS_TIER_LABELS[t],
                     style={"height": "24px", "verticalAlign": "middle"},
@@ -2659,6 +2646,22 @@ def render_preset_options(favorites):
     return get_favorite_options(favorites or []) + get_student_options()
 
 
+@callback(
+    Output("manual-body", "children"),
+    Output("manual-body", "className"),
+    Input("open-manual-btn", "n_clicks"),
+    State("manual-body", "className"),
+    prevent_initial_call=True,
+)
+def render_manual(n_clicks, loaded):
+    """マニュアルは初めて開いたときに描く（Markdown の描画部品 約100KB を
+    ページを開いただけでは読み込まないため）。描いたら className を付けて
+    2回目以降は送らない。開閉は main.py のクライアント側のコールバック。"""
+    if not n_clicks or loaded:
+        raise PreventUpdate
+    return dcc.Markdown(_MANUAL_MD), "manual-loaded"
+
+
 # ======================================================================
 # 贈り物逆引きページ
 # ======================================================================
@@ -2753,7 +2756,7 @@ def _gl_tier_section(gift: dict, tier: str, members: list[dict]) -> html.Div:
             html.Div(
                 [
                     html.Img(
-                        src=f"/assets/reaction/{_GS_TIER_ICON[tier]}.png",
+                        src=icon_src("reaction", _GS_TIER_ICON[tier]),
                         alt=label,
                         title=label,
                         style={"height": "24px", "verticalAlign": "middle"},
@@ -2893,7 +2896,7 @@ def _nc_gift_row(gift: dict, gifts_by_id: dict, weighted: bool) -> html.Div:
     if gift["tier"]:
         target = [
             html.Img(
-                src=f"/assets/reaction/{TIER_ICON[gift['tier']]}.png",
+                src=icon_src("reaction", TIER_ICON[gift["tier"]]),
                 title=TIER_LABEL[gift["tier"]],
                 style={"height": "18px", "verticalAlign": "middle"},
             ),
@@ -3207,11 +3210,11 @@ def bm_render(_n, bond_ranks):
 
     入力値の保存は bm_save_edits が行う。入力のたびに行を再生成すると
     フォーカスを失うため、描画はここだけで行う。あわせて、スクリーンショット
-    読み取りで照合する衣装の [[衣装ID, 表示名, 生徒画像があるか], ...] を返す
-    （生徒画像の無い衣装は名前だけで照合する）。
+    読み取りと画像保存で使う衣装の [[衣装ID, 表示名, 生徒画像の URL], ...] を返す
+    （生徒画像の無い衣装は URL が None で、読み取りでは名前だけで照合する）。
     """
     options = get_costume_options()
-    refs = [[o["value"], o["label"], o["label"] in _STUDENT_ICONS] for o in options]
+    refs = [[o["value"], o["label"], _student_icon_src(o["label"])] for o in options]
     return _bm_rows(bond_ranks, options), refs
 
 
@@ -3302,61 +3305,88 @@ def _bs_hist_bins(ranks: list[int], size: int) -> list[dict]:
     return bins
 
 
-def _bs_hist_figure(ranks: list[int], size: int) -> go.Figure:
-    """絆ランクの分布のヒストグラム（横軸 絆ランク・縦軸 衣装数）。
+# 絆ランクの分布の横軸の目盛り
+BS_X_TICKS = (1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+
+
+def _bs_count_ticks(peak: int) -> list[int]:
+    """縦軸（衣装数）の目盛り。0 から最大値以上まで、きりのよい間隔で5本前後。"""
+    step = next(
+        s * 10**e for e in range(12) for s in (1, 2, 5) if s * 10**e * 5 >= peak
+    )
+    top = max(-(-peak // step) * step, step)
+    return list(range(0, top + 1, step))
+
+
+def _bs_pct(units: float) -> str:
+    """横軸（絆ランク MIN_RANK-0.5〜MAX_RANK+0.5）上の長さを、幅に対する % にする。"""
+    return f"{units / (MAX_RANK - MIN_RANK + 1) * 100:.3f}%"
+
+
+def _bs_hist_chart(ranks: list[int], size: int) -> list:
+    """絆ランクの分布のヒストグラム（横軸 絆ランク・縦軸 衣装数）の中身。
 
     区間ごとに集計して棒の幅を区間の幅に合わせる（端の区間は 1〜9・100
-    のように短い）。横軸は 1〜100 に固定する。
+    のように短い）。横軸は 1〜100 に固定する。plotly を読み込まないよう
+    HTML/CSS の棒で描く。衣装数は、区切りが広い（5・10ごと）ときは棒の上に
+    出し、1ごとは棒が細いので、棒をタップ（フォーカス）するかカーソルを
+    合わせたときに吹き出しで出す（style.css。タッチ端末でも見られるように
+    title は使わない）。
     """
     bins = _bs_hist_bins(ranks, size)
-    fig = go.Figure(
-        go.Bar(
-            x=[(b["lo"] + b["hi"]) / 2 for b in bins],
-            y=[b["count"] for b in bins],
-            width=[b["hi"] - b["lo"] + 1 for b in bins],
-            customdata=[b["label"] for b in bins],
-            marker={"color": "#4a90d9", "line": {"color": "#fff", "width": 1}},
-            hovertemplate="絆ランク %{customdata}<br>%{y} 衣装<extra></extra>",
+    ticks = _bs_count_ticks(max((b["count"] for b in bins), default=0))
+    top = ticks[-1]
+    fine = size < 5
+    grid = [
+        html.Div(
+            html.Span(str(v)),
+            className="bs-hist-grid",
+            style={"bottom": f"{v / top * 100:.3f}%"},
         )
+        for v in ticks
+    ]
+
+    def bar(b: dict) -> html.Div:
+        # 吹き出しが描画域の外へはみ出さないよう、左右の端では寄せる向きを変える
+        side = " bs-hist-bar-l" if b["lo"] <= 10 else ""
+        side = " bs-hist-bar-r" if b["hi"] >= 90 else side
+        return html.Div(
+            None if fine else html.Span(str(b["count"]), className="bs-hist-count"),
+            className="bs-hist-bar" + side,
+            role="img",
+            tabIndex="0" if fine else None,
+            style={
+                "left": _bs_pct(b["lo"] - MIN_RANK),
+                "width": _bs_pct(b["hi"] - b["lo"] + 1),
+                "height": f"{b['count'] / top * 100:.3f}%",
+            },
+            **{
+                "aria-label": f"絆ランク {b['label']}: {b['count']} 衣装",
+                "data-label": f"{b['label']}: {b['count']} 衣装",
+            },
+        )
+
+    bars = [bar(b) for b in bins if b["count"]]
+    cap = html.Div(
+        html.Span(f"絆ボーナス上限（{BONUS_MAX_RANK}）"),
+        className="bs-hist-cap",
+        style={"left": _bs_pct(BONUS_MAX_RANK - MIN_RANK)},
     )
-    fig.add_vline(
-        x=BONUS_MAX_RANK - 0.5,
-        line={"color": "#9ca3af", "width": 1, "dash": "dot"},
-    )
-    fig.add_annotation(
-        x=BONUS_MAX_RANK - 0.5,
-        y=1,
-        yref="paper",
-        yanchor="bottom",
-        text=f"絆ボーナス上限（{BONUS_MAX_RANK}）",
-        showarrow=False,
-        font={"size": 11, "color": "#6b7280"},
-    )
-    fig.update_layout(
-        height=300,
-        margin={"l": 40, "r": 10, "t": 28, "b": 40},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font={"size": 12, "color": "#374151"},
-        dragmode=False,
-        hoverlabel={"font": {"size": 12}},
-    )
-    fig.update_xaxes(
-        title_text="絆ランク",
-        range=[MIN_RANK - 0.5, MAX_RANK + 0.5],
-        tickvals=[1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
-        fixedrange=True,
-        showgrid=False,
-        linecolor="#d1d5db",
-    )
-    fig.update_yaxes(
-        title_text="衣装数",
-        rangemode="tozero",
-        fixedrange=True,
-        gridcolor="#eceff3",
-        tickformat="d",
-    )
-    return fig
+    return [
+        html.Div("衣装数", className="bs-hist-ytitle"),
+        html.Div(
+            [*grid, *bars, cap],
+            className="bs-hist-plot" + (" bs-hist-fine" if fine else ""),
+        ),
+        html.Div(
+            [
+                html.Span(str(v), style={"left": _bs_pct(v - MIN_RANK + 0.5)})
+                for v in BS_X_TICKS
+            ],
+            className="bs-hist-xlabels",
+        ),
+        html.Div("絆ランク", className="bs-hist-xtitle"),
+    ]
 
 
 def _bs_render(bond_ranks, options: list[dict]):
@@ -3419,11 +3449,10 @@ def _bs_render(bond_ranks, options: list[dict]):
             ],
             className="bs-bin",
         ),
-        dcc.Graph(
+        html.Div(
+            _bs_hist_chart(st["ranks"], BS_BIN_DEFAULT),
             id="bs-hist-graph",
-            figure=_bs_hist_figure(st["ranks"], BS_BIN_DEFAULT),
-            config={"displayModeBar": False},
-            className="bs-hist-graph",
+            className="bs-hist",
         ),
         dcc.Store(id="bs-ranks", data=st["ranks"]),
     ]
@@ -3447,7 +3476,8 @@ def _bs_render(bond_ranks, options: list[dict]):
             hist,
             title="絆ランクの分布",
             hint="10ごとなら 1〜9・10〜19・…・90〜99・100 で区切ります。"
-            "棒にカーソルを合わせると衣装数が出ます。",
+            "衣装数は棒の上に出ます（1ごとでは、棒をタップするかカーソルを"
+            "合わせると出ます）。",
         ),
         panel(
             near,
@@ -3471,7 +3501,7 @@ def bs_render(_n, bond_ranks):
 
 
 @callback(
-    Output("bs-hist-graph", "figure"),
+    Output("bs-hist-graph", "children"),
     Input("bs-bin-size", "value"),
     State("bs-ranks", "data"),
 )
@@ -3479,7 +3509,7 @@ def bs_bin_size(size, ranks):
     """区切りの幅を変えたら、ヒストグラムを描き直す。"""
     if size not in BS_BIN_SIZES or not isinstance(ranks, list):
         raise PreventUpdate
-    return _bs_hist_figure(ranks, size)
+    return _bs_hist_chart(ranks, size)
 
 
 def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
@@ -3504,14 +3534,12 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
         e for e in merge_ocr_cards(result.get("cards")) if e["costume_id"] in labels
     ]
     notes = []
-    if result.get("failed"):
-        notes.append(
-            f"生徒のカードが見つからなかった画像が {result['failed']} 枚あります。"
-        )
-    if result.get("partial"):
-        notes.append(
-            f"画面の端で切れていたカード {result['partial']} 枚は読み取っていません。"
-        )
+    failed = _ocr_count(result.get("failed"))
+    partial = _ocr_count(result.get("partial"))
+    if failed:
+        notes.append(f"生徒のカードが見つからなかった画像が {failed} 枚あります。")
+    if partial:
+        notes.append(f"画面の端で切れていたカード {partial} 枚は読み取っていません。")
     if not entries:
         return (
             html.Span(
@@ -3641,6 +3669,18 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
 def bm_ocr_preview(result, bond_ranks):
     """スクリーンショットの読み取り結果を確認表にする。"""
     return _bm_ocr_preview(result, bond_ranks, get_costume_options())
+
+
+# 読み取り結果の枚数の上限（ブラウザからの値なので検証する。細工した値をそのまま
+# 返すと、応答が大きくなる）。
+_OCR_COUNT_MAX = 100_000
+
+
+def _ocr_count(value) -> int:
+    """読み取り結果の枚数（failed・partial）。整数でなければ 0、上限で切る。"""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return max(0, min(value, _OCR_COUNT_MAX))
 
 
 def _bm_ocr_apply(ocr_values, ocr_ids, rank_values, rank_ids):
