@@ -97,6 +97,12 @@ def apply_page_edits(data, rank_by_costume: dict) -> dict:
     )
 
 
+# 読み取り結果の上限（ブラウザからの値なので検証する）。カードは 1 枚の画像に
+# 十数枚なので 2 万枚は画像 1000 枚以上に当たる。食い違った名前は確認表に出すだけ。
+OCR_MAX_CARDS = 20_000
+OCR_MAX_NAMES = 3
+
+
 def merge_ocr_cards(cards) -> list[dict]:
     """スクリーンショットの読み取り結果（カードごと）を衣装ごとにまとめる。
 
@@ -113,7 +119,7 @@ def merge_ocr_cards(cards) -> list[dict]:
     if not isinstance(cards, list):
         return []
     readings: dict[int, list[tuple[int | None, bool, str | None]]] = {}
-    for c in cards:
+    for c in cards[:OCR_MAX_CARDS]:
         if not isinstance(c, dict):
             continue
         cid = _to_int(c.get("costume_id"))
@@ -137,7 +143,7 @@ def merge_ocr_cards(cards) -> list[dict]:
                 "rank": None if read is None else min(read, MAX_RANK),
                 "read": read,
                 "uncertain": not certain or len({r for r, _, _ in rs}) > 1,
-                "names": list(dict.fromkeys(n for _, _, n in rs if n)),
+                "names": list(dict.fromkeys(n for _, _, n in rs if n))[:OCR_MAX_NAMES],
                 "dropped": len(all_rs) - len(rs),
             }
         )

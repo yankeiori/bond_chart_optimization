@@ -5,7 +5,10 @@ from datetime import timedelta
 from pathlib import Path
 
 from dash import Dash
+from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+from app.caching import stabilize_mtimes, use_version_only_fingerprint
 
 # Python 3.12 の mimetypes は .webp を知らない環境があり（OS の mime.types 次第）、
 # 生徒画像が application/octet-stream で配信されてしまうため登録しておく。
@@ -16,6 +19,26 @@ if getattr(sys, "frozen", False):
     _BASE_DIR = Path(sys._MEIPASS)
 else:
     _BASE_DIR = Path(__file__).resolve().parent.parent
+
+# デプロイのたびに JS・CSS・画像の URL や ETag が変わり、再訪者が取り直すのを防ぐ
+# （app/caching.py）。mtime の書き換えは本番（PORT がある gunicorn/Render）だけで行い、
+# 手元の作業ツリーには触れない。
+use_version_only_fingerprint()
+if "PORT" in os.environ:
+    stabilize_mtimes(_BASE_DIR / "assets")
+
+# flask-compress の設定は Dash(compress=True) の初期化時に読まれるので、Flask を
+# 先に作って設定しておく。
+_server = Flask(__name__)
+_server.config.update(
+    # flask-compress は圧縮すると ETag に ":br" などを付け、条件付きリクエストを付け直した
+    # ETag で判定し直すのは、ここに挙げたエンドポイントのストリーム応答だけ。Dash の
+    # /assets を加えないと、再検証が 304 にならず毎回全量を送ってしまう。
+    COMPRESS_STREAMING_ENDPOINT_CONDITIONAL=["static", "_dash_assets.static"],
+    # リクエスト本文の上限。正規の最大はスクリーンショットの読み取り結果（1000 枚で
+    # 約 0.9 MB）。
+    MAX_CONTENT_LENGTH=4 * 1024 * 1024,
+)
 
 SITE_NAME = "絆上げ計算機"
 SITE_URL = "https://bond-chart-optimization.onrender.com/"
@@ -29,6 +52,7 @@ SITE_DESCRIPTION = (
 # 検索結果の説明文のため、description と OGP は HTML に直接埋め込む。
 app = Dash(
     __name__,
+    server=_server,
     assets_folder=str(_BASE_DIR / "assets"),
     # 管理画面だけで使うスクリプト（admin_*.js）は公開ページで読み込まない
     # （/assets/ からの配信はされる）

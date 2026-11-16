@@ -1769,7 +1769,8 @@ def create_root_layout() -> html.Div:
     """
     return html.Div(
         [
-            dcc.Location(id="url"),
+            # ルートの転送（main.py）で pathname を書き換えても読み直さない
+            dcc.Location(id="url", refresh="callback-nav"),
             # タイトル + ログイン（スクロールしても画面上部に残す。style.css）
             html.Div(
                 html.Div(

@@ -52,7 +52,7 @@ def test_dash_layout_is_not_cached(client):
 
 
 def test_dash_bundles_keep_long_cache(client):
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/chart-opt").get_data(as_text=True)
     start = html.index("/_dash-component-suites/dash/dcc/dash_core_components.v")
     url = html[start : html.index('"', start)]
     response = client.get(url)
