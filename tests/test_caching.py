@@ -25,8 +25,8 @@ def _first(subdir: str, pattern: str) -> str:
     "url",
     [
         _first("student", "*.webp"),
-        _first("gift", "*.png"),
-        _first("reaction", "*.png"),
+        _first("gift", "*.webp"),
+        _first("reaction", "*.webp"),
     ],
 )
 def test_icons_are_cached_for_a_week(client, url):
