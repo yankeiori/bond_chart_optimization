@@ -1199,6 +1199,16 @@ input[type="number"] {
 .bm-ocr-help[open] .bm-ocr-example {
     background-image: url("ocr_example.webp");
 }
+/* 確認表の下の反映ボタン。表をスクロールしている間は画面の下端に固定し、
+   表の最後まで来たら表のすぐ下に収まる（表が画面外なら出ない） */
+.bm-ocr-apply-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    padding: 8px 0;
+    border-top: 1px solid var(--c-border);
+    background: rgba(255, 255, 255, 0.95);
+}
 /* 要確認の衣装の行に並べる、読み取ったカードの切り抜き（bond_ocr.js の crops） */
 .bm-ocr-crops {
     flex-basis: 100%;
