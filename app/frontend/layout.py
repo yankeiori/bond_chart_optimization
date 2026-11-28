@@ -1490,7 +1490,8 @@ _BM_MAX_COLUMNS = 6
 
 def _bm_ocr_panel() -> html.Div:
     """スクリーンショットからの読み取り。見出しの右に画像の選択ボタンを置き、
-    撮り方・サンプル画像は折りたたむ。確認表（bm-ocr-preview）は読み取り後に出る。"""
+    撮り方・サンプル画像は折りたたむ。複数枚をまとめて選べることはボタンと
+    常に見える補足（hint）で伝える。確認表（bm-ocr-preview）は読み取り後に出る。"""
     return panel(
         [
             html.Details(
@@ -1498,8 +1499,9 @@ def _bm_ocr_panel() -> html.Div:
                     html.Summary("撮り方・サンプル画像"),
                     html.P(
                         "ゲームの「生徒リスト」画面を、並び替えを「絆ランク」に"
-                        "してから撮影してください。スクロールしながら撮った複数枚を"
-                        "まとめて選べます（画面の端で切れているカードは読み取りません）。",
+                        "してから撮影してください。画面の端で切れているカードは"
+                        "読み取らないため、前の画像と少し重なるようにスクロールして"
+                        "撮ると読み漏れがありません。",
                         className="hint",
                     ),
                     # 画像は折りたたみを開いたときだけ読み込む（style.css の
@@ -1530,11 +1532,13 @@ def _bm_ocr_panel() -> html.Div:
                 id="bm-ocr-upload",
                 multiple=True,
                 accept="image/*",
-                children=html.Span("画像を選択（ドロップも可）", className="btn"),
+                children=html.Span("画像を選択（複数枚・ドロップ可）", className="btn"),
                 className="bm-ocr-upload",
             )
         ],
         hint="生徒リスト画面の画像から絆ランクを読み取ります。"
+        "スクロールしながら撮った複数枚をまとめて選べます"
+        "（重なって写った生徒は1人分にまとめます）。"
         "画像はこのブラウザ内で処理し、サーバーには送信しません。",
         className="bm-ocr-panel",
     )

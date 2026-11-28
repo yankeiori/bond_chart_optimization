@@ -3645,16 +3645,21 @@ def _bm_ocr_preview(result, bond_ranks, options: list[dict]):
                 },
             )
         )
-    # 確認表は長くなるので、反映ボタンは表の上に置く
+    # 確認表は長くなるので、反映ボタンは表の下に置き、表をスクロールしている間は
+    # 画面の下端に固定する（style.css の .bm-ocr-apply-bar）。見終えた位置から
+    # 上に戻らずに押せる。
     preview = [
-        html.Button(
-            "絆ランク管理に反映",
-            id="bm-ocr-apply-btn",
-            n_clicks=0,
-            title="確認表の絆ランクを下の一覧に反映して保存する（空欄の衣装は反映しない）",
-            className=BOND_RANKS_BTN_CLASS,
+        html.Div(rows, className="bm-rows bm-ocr-rows", style={"marginTop": "8px"}),
+        html.Div(
+            html.Button(
+                "絆ランク管理に反映",
+                id="bm-ocr-apply-btn",
+                n_clicks=0,
+                title="確認表の絆ランクを下の一覧に反映して保存する（空欄の衣装は反映しない）",
+                className=BOND_RANKS_BTN_CLASS,
+            ),
+            className="bm-ocr-apply-bar",
         ),
-        html.Div(rows, className="bm-rows bm-ocr-rows", style={"margin": "8px 0"}),
     ]
     return status, preview
 
